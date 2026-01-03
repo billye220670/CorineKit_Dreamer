@@ -504,6 +504,17 @@ body {
   color: rgba(255, 255, 255, 0.6);
 }
 
+.hq-button.queued {
+  background: rgba(236, 72, 153, 0.9);
+  cursor: pointer;
+}
+
+.hq-button.queued:hover {
+  background: rgba(219, 39, 119, 1);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 20px rgba(236, 72, 153, 0.6);
+}
+
 /* 取消按钮样式 - queue状态右上角 */
 .cancel-queue-button {
   position: absolute;

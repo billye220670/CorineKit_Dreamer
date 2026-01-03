@@ -862,14 +862,12 @@ const App = () => {
     const batchId = placeholder.batchId;
     console.log('[cancelQueuedTask] batchId:', batchId);
 
-    // 删除该占位符
-    setImagePlaceholders(prev => {
-      console.log('[cancelQueuedTask] 删除前占位符总数:', prev.length);
-      const filtered = prev.filter(p => p.id !== placeholderId);
-      console.log('[cancelQueuedTask] 删除后占位符总数:', filtered.length);
-      imagePlaceholdersRef.current = filtered;
-      return filtered;
-    });
+    // 删除该占位符 - 先更新ref再更新state
+    const filtered = imagePlaceholdersRef.current.filter(p => p.id !== placeholderId);
+    imagePlaceholdersRef.current = filtered;
+    setImagePlaceholders(filtered);
+
+    console.log('[cancelQueuedTask] 删除后占位符总数:', filtered.length);
 
     // 检查该batchId下是否还有其他queue状态的占位符
     setTimeout(() => {
@@ -887,6 +885,41 @@ const App = () => {
         console.log('[cancelQueuedTask] 该batchId下还有queue占位符，不移除队列任务');
       }
     }, 0);
+  };
+
+  // 取消高清化队列中的单个任务
+  const cancelUpscaleTask = (placeholderId) => {
+    console.log('[cancelUpscaleTask] 被调用, placeholderId:', placeholderId);
+
+    // 从ref中获取占位符
+    const placeholder = imagePlaceholdersRef.current.find(p => p.id === placeholderId);
+    console.log('[cancelUpscaleTask] 找到的占位符:', placeholder);
+
+    if (!placeholder) {
+      console.log('[cancelUpscaleTask] 未找到占位符，退出');
+      return;
+    }
+
+    // 只能取消queued状态的任务，不能取消正在upscaling的任务
+    if (placeholder.upscaleStatus !== 'queued') {
+      console.log('[cancelUpscaleTask] 占位符不是queued状态，无法取消, 当前状态:', placeholder.upscaleStatus);
+      return;
+    }
+
+    console.log('[cancelUpscaleTask] 开始取消高清化任务');
+
+    // 将upscaleStatus改回none - 先更新ref再更新state
+    const updated = imagePlaceholdersRef.current.map(p =>
+      p.id === placeholderId ? { ...p, upscaleStatus: 'none', upscaleProgress: 0 } : p
+    );
+    imagePlaceholdersRef.current = updated;
+    setImagePlaceholders(updated);
+
+    // 从高清化队列中移除
+    console.log('[cancelUpscaleTask] 移除前高清化队列:', JSON.stringify(upscaleQueueRef.current));
+    upscaleQueueRef.current = upscaleQueueRef.current.filter(id => id !== placeholderId);
+    console.log('[cancelUpscaleTask] 移除后高清化队列:', JSON.stringify(upscaleQueueRef.current));
+    setUpscaleQueue(upscaleQueueRef.current);
   };
 
   // 下载图片
@@ -1193,12 +1226,24 @@ const App = () => {
                       {/* HQ按钮 - 仅在completed状态显示 */}
                       {placeholder.status === 'completed' && (
                         <button
-                          className={`hq-button ${placeholder.upscaleStatus === 'completed' ? 'completed' : ''} ${placeholder.upscaleStatus === 'upscaling' || placeholder.upscaleStatus === 'queued' ? 'disabled' : ''}`}
-                          onClick={() => queueUpscale(placeholder.id)}
-                          disabled={placeholder.upscaleStatus !== 'none'}
+                          className={`hq-button ${placeholder.upscaleStatus === 'completed' ? 'completed' : ''} ${placeholder.upscaleStatus === 'upscaling' ? 'disabled' : ''} ${placeholder.upscaleStatus === 'queued' ? 'queued' : ''}`}
+                          onClick={() => {
+                            if (placeholder.upscaleStatus === 'none') {
+                              queueUpscale(placeholder.id);
+                            } else if (placeholder.upscaleStatus === 'queued') {
+                              cancelUpscaleTask(placeholder.id);
+                            }
+                          }}
+                          disabled={placeholder.upscaleStatus === 'upscaling'}
+                          title={
+                            placeholder.upscaleStatus === 'completed' ? '已完成高清化' :
+                            placeholder.upscaleStatus === 'queued' ? '点击取消高清化' :
+                            placeholder.upscaleStatus === 'upscaling' ? '高清化中...' :
+                            '点击高清化'
+                          }
                         >
                           {placeholder.upscaleStatus === 'completed' ? 'HQ Done' :
-                           placeholder.upscaleStatus === 'queued' ? 'Queue' :
+                           placeholder.upscaleStatus === 'queued' ? 'Cancel HQ' :
                            'HQ'}
                         </button>
                       )}
