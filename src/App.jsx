@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import Masonry from 'react-masonry-css';
 import './App.css';
 import workflowTemplate from '../CorineGen.json';
 import upscaleTemplate from '../ImageUpscaleAPI.json';
@@ -182,6 +183,19 @@ const App = () => {
     }
   };
 
+  // 获取图像比例（用于网格布局）
+  const getAspectRatioValue = () => {
+    switch (aspectRatio) {
+      case 'portrait':
+        return 720 / 1280; // 0.5625
+      case 'landscape':
+        return 1280 / 720; // 1.778
+      case 'square':
+      default:
+        return 1; // 1:1
+    }
+  };
+
   // 生成或获取种子
   const getSeed = () => {
     if (seedMode === 'fixed') {
@@ -250,6 +264,7 @@ const App = () => {
     if (finalBatchId === null) {
       finalBatchId = nextBatchId.current++;
       const totalImages = batchSize;
+      const currentAspectRatio = getAspectRatioValue();
       placeholders = Array.from({ length: totalImages }, (_, index) => ({
         id: `${promptId}-${finalBatchId}-${index}`,
         status: 'queue',
@@ -262,7 +277,8 @@ const App = () => {
         upscaleProgress: 0,
         hqImageUrl: null,
         hqFilename: null,
-        seed: null
+        seed: null,
+        aspectRatio: currentAspectRatio // 保存当前图像比例
       }));
 
       // 先更新ref（同步），再更新state（异步）
@@ -312,6 +328,7 @@ const App = () => {
     // 立即创建骨架占位符
     const batchId = nextBatchId.current++;
     const totalImages = batchSize;
+    const currentAspectRatio = getAspectRatioValue();
     const placeholders = Array.from({ length: totalImages }, (_, index) => ({
       id: `${promptId}-${batchId}-${index}`,
       status: 'queue',
@@ -324,7 +341,8 @@ const App = () => {
       upscaleProgress: 0,
       hqImageUrl: null,
       hqFilename: null,
-      seed: null
+      seed: null,
+      aspectRatio: currentAspectRatio // 保存当前图像比例
     }));
 
     // 先更新ref（同步），再更新state（异步）
@@ -1360,9 +1378,20 @@ const App = () => {
         <div className="images-container">
           {imagePlaceholders.length > 0 ? (
             <>
-              <div className={`images-grid view-${viewMode}`}>
+              <Masonry
+                breakpointCols={{
+                  default: viewMode === 'large' ? 1 : viewMode === 'medium' ? 2 : 3,
+                  768: 1
+                }}
+                className="images-grid"
+                columnClassName="images-grid-column"
+              >
                 {imagePlaceholders.map((placeholder) => (
-                  <div key={placeholder.id} className="image-placeholder">
+                  <div
+                    key={placeholder.id}
+                    className="image-placeholder"
+                    style={{ '--item-aspect-ratio': placeholder.aspectRatio || 1 }}
+                  >
                     <div className="skeleton">
                       {/* 背景图片 */}
                       {(placeholder.status === 'revealing' || placeholder.status === 'completed') && placeholder.imageUrl && (
@@ -1436,7 +1465,7 @@ const App = () => {
                     </div>
                   </div>
                 ))}
-              </div>
+              </Masonry>
             </>
           ) : (
             // 无图像时的占位区域

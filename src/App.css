@@ -658,9 +658,11 @@ body {
   border: 2px solid var(--theme-border);
   border-radius: 12px;
   overflow: hidden;
-  aspect-ratio: 1;
   position: relative;
   transition: all 0.3s ease;
+  /* 确保内容填充 */
+  width: 100%;
+  height: fit-content; /* 确保容器高度适配子元素 */
 }
 
 .image-placeholder:hover {
@@ -672,7 +674,7 @@ body {
 .generated-image {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain; /* 改为 contain 确保完整显示 */
   cursor: pointer;
   display: block;
 }
@@ -680,7 +682,8 @@ body {
 /* 骨架屏样式 */
 .skeleton {
   width: 100%;
-  height: 100%;
+  /* 使用 CSS aspect-ratio 保持比例 */
+  aspect-ratio: var(--item-aspect-ratio, 1);
   position: relative;
   background: hsla(calc(var(--theme-hue) * 1), calc(var(--theme-bg-saturation) * 1%), calc(var(--theme-bg-lightness) * 1%), 0.6);
   display: flex;
@@ -921,30 +924,25 @@ body {
 }
 
 .images-grid {
-  display: grid;
+  display: flex;
+  width: 100%;
+}
+
+.images-grid-column {
+  display: flex;
+  flex-direction: column;
   gap: 24px;
-  transition: grid-template-columns 0.3s ease;
+  background-clip: padding-box;
 }
 
-/* 视图模式 */
-.images-grid.view-small {
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+.images-grid-column:not(:first-child) {
+  margin-left: 24px;
 }
 
-.images-grid.view-medium {
-  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-}
-
-.images-grid.view-large {
-  grid-template-columns: 1fr;
-}
-
-/* 响应式：在小屏幕上忽略视图模式，强制单列 */
+/* 响应式：在小屏幕上强制单列 */
 @media (max-width: 768px) {
-  .images-grid.view-small,
-  .images-grid.view-medium,
-  .images-grid.view-large {
-    grid-template-columns: 1fr;
+  .images-grid-column:not(:first-child) {
+    margin-left: 0;
   }
 }
 

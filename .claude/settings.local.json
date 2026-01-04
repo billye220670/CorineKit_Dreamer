@@ -11,7 +11,8 @@
       "WebFetch(domain:www.viewcomfy.com)",
       "WebFetch(domain:9elements.com)",
       "WebFetch(domain:dev.to)",
-      "Bash(npm run dev:*)"
+      "Bash(npm run dev:*)",
+      "Bash(npm install:*)"
     ]
   }
 }
