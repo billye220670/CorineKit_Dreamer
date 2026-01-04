@@ -41,12 +41,36 @@ body {
   position: relative;
 }
 
-/* 主题按钮 */
+/* 主题按钮容器 */
 .theme-button-container {
   position: absolute;
   top: 0;
   right: 0;
   z-index: 1000;
+  display: flex;
+  gap: 12px;
+}
+
+/* 视图切换按钮 */
+.view-toggle-button {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--theme-primary);
+  border: 2px solid var(--theme-border);
+  color: white;
+  font-size: 1.3rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.view-toggle-button:hover {
+  transform: scale(1.1);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
 }
 
 .theme-button {
@@ -408,6 +432,14 @@ body {
   font-family: inherit;
   transition: all 0.3s ease;
   resize: vertical;
+  /* 隐藏滚动条 */
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge */
+}
+
+.textarea::-webkit-scrollbar,
+.input::-webkit-scrollbar {
+  display: none; /* Chrome/Safari/Opera */
 }
 
 .textarea:focus,
@@ -890,8 +922,30 @@ body {
 
 .images-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   gap: 24px;
+  transition: grid-template-columns 0.3s ease;
+}
+
+/* 视图模式 */
+.images-grid.view-small {
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+}
+
+.images-grid.view-medium {
+  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+}
+
+.images-grid.view-large {
+  grid-template-columns: 1fr;
+}
+
+/* 响应式：在小屏幕上忽略视图模式，强制单列 */
+@media (max-width: 768px) {
+  .images-grid.view-small,
+  .images-grid.view-medium,
+  .images-grid.view-large {
+    grid-template-columns: 1fr;
+  }
 }
 
 .image-card {

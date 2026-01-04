@@ -51,6 +51,7 @@ const App = () => {
   const [themeBgSaturation, setThemeBgSaturation] = useState(() => loadFromStorage('corineGen_themeBgSaturation', 60));
   const [themeBgLightness, setThemeBgLightness] = useState(() => loadFromStorage('corineGen_themeBgLightness', 8));
   const [showThemePicker, setShowThemePicker] = useState(false); // 显示颜色选择器
+  const [viewMode, setViewMode] = useState(() => loadFromStorage('corineGen_viewMode', 'medium')); // small, medium, large
   const firstSeedRef = useRef(null);
 
   // 计算下一个提示词ID
@@ -109,6 +110,32 @@ const App = () => {
   useEffect(() => {
     localStorage.setItem('corineGen_firstFixedSeed', JSON.stringify(firstFixedSeed));
   }, [firstFixedSeed]);
+
+  useEffect(() => {
+    localStorage.setItem('corineGen_viewMode', JSON.stringify(viewMode));
+  }, [viewMode]);
+
+  // 切换视图模式
+  const toggleViewMode = () => {
+    const modes = ['small', 'medium', 'large'];
+    const currentIndex = modes.indexOf(viewMode);
+    const nextIndex = (currentIndex + 1) % modes.length;
+    setViewMode(modes[nextIndex]);
+  };
+
+  // 获取视图图标
+  const getViewIcon = () => {
+    switch (viewMode) {
+      case 'small':
+        return '⊞'; // 小格子
+      case 'medium':
+        return '⊟'; // 中格子
+      case 'large':
+        return '▢'; // 大格子
+      default:
+        return '⊟';
+    }
+  };
 
   // 辅助函数：更新占位符并同步ref
   const updateImagePlaceholders = (updater) => {
@@ -986,8 +1013,15 @@ const App = () => {
       '--theme-text': `hsl(${themeHue}, 70%, 92%)`,
     }}>
       <div className="container">
-        {/* 主题按钮 */}
+        {/* 视图和主题按钮 */}
         <div className="theme-button-container">
+          <button
+            className="view-toggle-button"
+            onClick={toggleViewMode}
+            title={`当前视图: ${viewMode === 'small' ? '小' : viewMode === 'medium' ? '中' : '大'}`}
+          >
+            {getViewIcon()}
+          </button>
           <button
             className="theme-button"
             onClick={() => setShowThemePicker(!showThemePicker)}
@@ -1326,7 +1360,7 @@ const App = () => {
         <div className="images-container">
           {imagePlaceholders.length > 0 ? (
             <>
-              <div className="images-grid">
+              <div className={`images-grid view-${viewMode}`}>
                 {imagePlaceholders.map((placeholder) => (
                   <div key={placeholder.id} className="image-placeholder">
                     <div className="skeleton">
