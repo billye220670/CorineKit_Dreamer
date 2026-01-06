@@ -67,6 +67,48 @@ const App = () => {
   const upscaleQueueRef = useRef([]); // 同步跟踪高清化队列，避免状态更新延迟
   const generationQueueRef = useRef([]); // 同步跟踪生成队列，避免状态更新延迟
   const imagePlaceholdersRef = useRef([]); // 同步跟踪占位符，避免闭包陷阱
+  const imagesContainerRef = useRef(null); // 图片容器ref，用于自动滚动
+
+  // 平滑滚动到图片容器底部
+  const scrollToBottom = () => {
+    if (imagesContainerRef.current) {
+      setTimeout(() => {
+        const container = imagesContainerRef.current;
+        const targetScroll = container.scrollHeight - container.clientHeight;
+        const startScroll = container.scrollTop;
+        const distance = targetScroll - startScroll;
+
+        if (distance <= 0) return; // 已经在底部或不需要滚动
+
+        const duration = 600; // 滚动动画时长 ms
+        const startTime = performance.now();
+
+        // 缓动函数 - easeOutCubic
+        const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
+
+        const animateScroll = (currentTime) => {
+          const elapsed = currentTime - startTime;
+          const progress = Math.min(elapsed / duration, 1);
+          const easedProgress = easeOutCubic(progress);
+
+          container.scrollTop = startScroll + distance * easedProgress;
+
+          if (progress < 1) {
+            requestAnimationFrame(animateScroll);
+          }
+        };
+
+        requestAnimationFrame(animateScroll);
+
+        // 闪烁动画结束后移除 isNew 标记（动画时长 1.6s）
+        setTimeout(() => {
+          updateImagePlaceholders(prev => prev.map(p =>
+            p.isNew ? { ...p, isNew: false } : p
+          ));
+        }, 1600);
+      }, 100); // 延迟确保DOM已更新
+    }
+  };
 
   // 保存设置到localStorage
   useEffect(() => {
@@ -375,6 +417,7 @@ const App = () => {
         id: `${promptId}-${finalBatchId}-${index}`,
         status: 'queue',
         isLoading: false, // 是否正在加载模型
+        isNew: true, // 新创建的占位符，用于闪烁动画
         progress: 0,
         imageUrl: null,
         filename: null,
@@ -395,6 +438,9 @@ const App = () => {
       const updated = [...imagePlaceholdersRef.current, ...placeholders];
       imagePlaceholdersRef.current = updated;
       setImagePlaceholders(updated);
+
+      // 新任务加入时自动滚动到底部
+      scrollToBottom();
     }
 
     // 从占位符中获取保存的生成参数
@@ -466,6 +512,7 @@ const App = () => {
       id: `${promptId}-${batchId}-${index}`,
       status: 'queue',
       isLoading: false, // 是否正在加载模型
+      isNew: true, // 新创建的占位符，用于闪烁动画
       progress: 0,
       imageUrl: null,
       filename: null,
@@ -484,6 +531,9 @@ const App = () => {
     const updated = [...imagePlaceholdersRef.current, ...placeholders];
     imagePlaceholdersRef.current = updated;
     setImagePlaceholders(updated);
+
+    // 新任务加入时自动滚动到底部
+    scrollToBottom();
 
     if (!isGenerating) {
       // 队列为空，直接开始
@@ -1154,21 +1204,29 @@ const App = () => {
 
     const batchId = placeholder.batchId;
 
-    // 删除该占位符 - 先更新ref再更新state
-    const filtered = imagePlaceholdersRef.current.filter(p => p.id !== placeholderId);
-    imagePlaceholdersRef.current = filtered;
-    setImagePlaceholders(filtered);
+    // 先标记为正在移除，触发动画
+    updateImagePlaceholders(prev => prev.map(p =>
+      p.id === placeholderId ? { ...p, isRemoving: true } : p
+    ));
 
-    // 检查该batchId下是否还有其他queue状态的占位符
+    // 动画结束后再真正移除（动画时长 400ms）
     setTimeout(() => {
-      const remainingQueuedForBatch = imagePlaceholdersRef.current.filter(p => p.batchId === batchId && p.status === 'queue');
+      // 删除该占位符 - 先更新ref再更新state
+      const filtered = imagePlaceholdersRef.current.filter(p => p.id !== placeholderId);
+      imagePlaceholdersRef.current = filtered;
+      setImagePlaceholders(filtered);
 
-      // 如果该batchId下没有queue占位符了，从队列中移除该任务
-      if (remainingQueuedForBatch.length === 0) {
-        generationQueueRef.current = generationQueueRef.current.filter(task => task.batchId !== batchId);
-        setGenerationQueue(generationQueueRef.current);
-      }
-    }, 0);
+      // 检查该batchId下是否还有其他queue状态的占位符
+      setTimeout(() => {
+        const remainingQueuedForBatch = imagePlaceholdersRef.current.filter(p => p.batchId === batchId && p.status === 'queue');
+
+        // 如果该batchId下没有queue占位符了，从队列中移除该任务
+        if (remainingQueuedForBatch.length === 0) {
+          generationQueueRef.current = generationQueueRef.current.filter(task => task.batchId !== batchId);
+          setGenerationQueue(generationQueueRef.current);
+        }
+      }, 0);
+    }, 400);
   };
 
   // 取消高清化队列中的单个任务
@@ -1625,7 +1683,7 @@ const App = () => {
         </div>
 
         {/* 图像展示区域 - 骨架占位图 */}
-        <div className="images-container">
+        <div className="images-container" ref={imagesContainerRef}>
           {imagePlaceholders.length > 0 ? (
             <>
               <Masonry
@@ -1642,7 +1700,7 @@ const App = () => {
                     className="image-placeholder"
                     style={{ '--item-aspect-ratio': placeholder.aspectRatio || 1 }}
                   >
-                    <div className="skeleton">
+                    <div className={`skeleton ${placeholder.isNew ? 'skeleton-new' : ''} ${placeholder.isRemoving ? 'skeleton-removing' : ''}`}>
                       {/* 背景图片 */}
                       {(placeholder.status === 'revealing' || placeholder.status === 'completed') && placeholder.imageUrl && (
                         <img
