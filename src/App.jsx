@@ -54,6 +54,8 @@ const App = () => {
   const [themeBgLightness, setThemeBgLightness] = useState(() => loadFromStorage('corineGen_themeBgLightness', 8));
   const [showThemePicker, setShowThemePicker] = useState(false); // 显示颜色选择器
   const [viewMode, setViewMode] = useState(() => loadFromStorage('corineGen_viewMode', 'medium')); // small, medium, large
+  const [prioritizeGeneration, setPrioritizeGeneration] = useState(() => loadFromStorage('corineGen_prioritizeGeneration', false)); // 生图队列优先
+  const [autoUpscaleAfterGen, setAutoUpscaleAfterGen] = useState(() => loadFromStorage('corineGen_autoUpscaleAfterGen', false)); // 生图后自动高清化
   const firstSeedRef = useRef(null);
 
   // 计算下一个提示词ID
@@ -120,6 +122,14 @@ const App = () => {
   useEffect(() => {
     localStorage.setItem('corineGen_viewMode', JSON.stringify(viewMode));
   }, [viewMode]);
+
+  useEffect(() => {
+    localStorage.setItem('corineGen_prioritizeGeneration', JSON.stringify(prioritizeGeneration));
+  }, [prioritizeGeneration]);
+
+  useEffect(() => {
+    localStorage.setItem('corineGen_autoUpscaleAfterGen', JSON.stringify(autoUpscaleAfterGen));
+  }, [autoUpscaleAfterGen]);
 
   // 切换视图模式
   const toggleViewMode = () => {
@@ -247,7 +257,7 @@ const App = () => {
   };
 
   // 构建ComfyUI工作流
-  const buildWorkflow = (promptText, actualBatchSize = null, savedParams = null) => {
+  const buildWorkflow = (promptText, actualBatchSize = null, savedParams = null, uniqueId = null) => {
     const workflow = JSON.parse(JSON.stringify(workflowTemplate));
 
     // 如果提供了保存的参数，使用保存的参数；否则使用当前全局状态
@@ -297,6 +307,13 @@ const App = () => {
       processedPrompt = 'yjy，中国女孩，' + processedPrompt;
     }
 
+    // 在固定种子模式下，添加唯一标识符来禁用ComfyUI的执行缓存
+    // 使用零宽空格（不影响生成结果，但使每次请求的prompt不同）
+    if (uniqueId) {
+      const cacheBreaker = `\u200B${uniqueId}\u200B${Date.now()}`;
+      processedPrompt = processedPrompt + cacheBreaker;
+    }
+
     // 更新prompt
     workflow['5'].inputs.text = processedPrompt;
 
@@ -317,6 +334,11 @@ const App = () => {
     // RepeatLatentBatch的amount设置为1，避免批次数量被平方
     workflow['44'].inputs.amount = 1;
 
+    // 设置唯一的文件名前缀，避免固定种子模式下文件名重复
+    if (uniqueId) {
+      workflow['24'].inputs.filename_prefix = `Corine_${uniqueId}_`;
+    }
+
     return { workflow, seed };
   };
 
@@ -326,6 +348,8 @@ const App = () => {
       setError('请输入提示词');
       return;
     }
+
+    console.log('[generateForPrompt] 开始生成 - promptId:', promptId, 'batchId:', batchId, 'seedMode:', seedMode);
 
     // 标记提示词为生成中（仅用于UI反馈，不再用于禁用按钮）
     setPrompts(prev => prev.map(p => p.id === promptId ? { ...p, isGenerating: true } : p));
@@ -364,6 +388,8 @@ const App = () => {
         savedParams: savedParams // 保存生成参数（用于生成）
       }));
 
+      console.log('[generateForPrompt] 创建占位符:', placeholders.map(p => ({ id: p.id, status: p.status, imageUrl: p.imageUrl })));
+
       // 先更新ref（同步），再更新state（异步）
       const updated = [...imagePlaceholdersRef.current, ...placeholders];
       imagePlaceholdersRef.current = updated;
@@ -394,6 +420,17 @@ const App = () => {
   const processQueue = () => {
     if (generationQueueRef.current.length === 0) {
       setIsGenerating(false);
+
+      // 如果启用了生图队列优先，且高清化队列有任务等待，启动高清化
+      if (prioritizeGeneration && upscaleQueueRef.current.length > 0 && !isUpscalingRef.current) {
+        isUpscalingRef.current = true;
+        setIsUpscaling(true);
+        const nextPlaceholderId = upscaleQueueRef.current[0];
+        upscaleQueueRef.current = upscaleQueueRef.current.slice(1);
+        setUpscaleQueue(upscaleQueueRef.current);
+        upscaleImage(nextPlaceholderId);
+      }
+
       return;
     }
 
@@ -479,7 +516,7 @@ const App = () => {
     let timeoutId = null;
 
     try {
-      const { workflow, seed } = buildWorkflow(promptText, null, savedParams);
+      const { workflow, seed } = buildWorkflow(promptText, null, savedParams, batchId);
 
       // 保存种子到所有batchId的占位符
       updateImagePlaceholders(prev => prev.map(p =>
@@ -546,7 +583,7 @@ const App = () => {
                         filename: img.filename,
                         subfolder: img.subfolder,
                         type: img.type,
-                        url: `${COMFYUI_API}/view?filename=${img.filename}&subfolder=${img.subfolder}&type=${img.type}`,
+                        url: `${COMFYUI_API}/view?filename=${img.filename}&subfolder=${img.subfolder}&type=${img.type}&t=${Date.now()}`,
                       });
                     });
                   }
@@ -571,9 +608,23 @@ const App = () => {
 
                 // 延迟后设置为completed，显示图片
                 setTimeout(() => {
-                  updateImagePlaceholders(prev => prev.map(p =>
-                    p.batchId === batchId ? { ...p, status: 'completed' } : p
-                  ));
+                  updateImagePlaceholders(prev => {
+                    const completedPlaceholders = prev.map(p =>
+                      p.batchId === batchId ? { ...p, status: 'completed' } : p
+                    );
+
+                    // 如果启用了自动高清化，将完成的图片加入高清化队列
+                    if (autoUpscaleAfterGen) {
+                      completedPlaceholders.forEach(p => {
+                        if (p.batchId === batchId && p.status === 'completed') {
+                          // 异步调用 queueUpscale，避免在状态更新中同步调用
+                          setTimeout(() => queueUpscale(p.id), 0);
+                        }
+                      });
+                    }
+
+                    return completedPlaceholders;
+                  });
                 }, 800);
               }
 
@@ -638,7 +689,11 @@ const App = () => {
 
   // 工作流循环执行模式
   const generateLoop = async (promptId, promptText, placeholders, batchId, savedParams = null) => {
+    console.log('[generateLoop] 开始循环 - batchId:', batchId, 'batchSize:', batchSize);
+
     for (let i = 0; i < batchSize; i++) {
+      console.log(`[generateLoop] 循环 ${i + 1}/${batchSize}`);
+
       // 每次循环前检查该batchId下是否还有queue状态的占位符
 
       // 使用ref读取最新的占位符状态
@@ -651,8 +706,11 @@ const App = () => {
         targetPlaceholder = queuedPlaceholders[0];
       }
 
+      console.log('[generateLoop] 找到的队列占位符数量:', queuedPlaceholders.length, 'targetPlaceholder:', targetPlaceholder?.id);
+
       // 如果没有queue状态的占位符了，结束循环
       if (!targetPlaceholder) {
+        console.log('[generateLoop] 没有更多队列占位符，结束循环');
         break;
       }
 
@@ -661,7 +719,9 @@ const App = () => {
       let timeoutId = null;
 
       try {
-        const { workflow, seed } = buildWorkflow(promptText, 1, savedParams);
+        const { workflow, seed } = buildWorkflow(promptText, 1, savedParams, targetPlaceholder.id);
+
+        console.log('[generateLoop] 构建工作流 - seed:', seed, 'targetPlaceholder:', targetPlaceholder.id, 'prompt长度:', workflow['5'].inputs.text.length);
 
         // 保存种子到当前占位符
         updateImagePlaceholders(prev => prev.map(p =>
@@ -717,6 +777,8 @@ const App = () => {
 
                 // 当node为null时，表示执行完成
                 if (node === null && prompt_id) {
+                  console.log('[generateLoop] 执行完成 - prompt_id:', prompt_id, 'targetPlaceholder:', targetPlaceholder.id);
+
                   // 获取生成的图像
                   const historyResponse = await fetch(`${COMFYUI_API}/history/${prompt_id}`);
                   const history = await historyResponse.json();
@@ -727,7 +789,9 @@ const App = () => {
                     for (const nodeId in outputs) {
                       if (outputs[nodeId].images && outputs[nodeId].images[0]) {
                         const img = outputs[nodeId].images[0];
-                        const imageUrl = `${COMFYUI_API}/view?filename=${img.filename}&subfolder=${img.subfolder}&type=${img.type}`;
+                        const imageUrl = `${COMFYUI_API}/view?filename=${img.filename}&subfolder=${img.subfolder}&type=${img.type}&t=${Date.now()}`;
+
+                        console.log('[generateLoop] 获取到图片 - filename:', img.filename, 'imageUrl:', imageUrl, '准备更新占位符:', targetPlaceholder.id);
 
                         // 更新当前占位符为revealing状态，触发动画
                         updateImagePlaceholders(prev =>
@@ -744,11 +808,23 @@ const App = () => {
 
                         // 延迟后设置为completed，显示图片
                         setTimeout(() => {
-                          updateImagePlaceholders(prev =>
-                            prev.map(p =>
+                          updateImagePlaceholders(prev => {
+                            const completedPlaceholders = prev.map(p =>
                               p.id === targetPlaceholder.id ? { ...p, status: 'completed' } : p
-                            )
-                          );
+                            );
+
+                            console.log('[generateLoop] 占位符标记为completed:', targetPlaceholder.id);
+
+                            // 如果启用了自动高清化，将完成的图片加入高清化队列
+                            if (autoUpscaleAfterGen) {
+                              const completedPlaceholder = completedPlaceholders.find(p => p.id === targetPlaceholder.id);
+                              if (completedPlaceholder && completedPlaceholder.status === 'completed') {
+                                setTimeout(() => queueUpscale(completedPlaceholder.id), 0);
+                              }
+                            }
+
+                            return completedPlaceholders;
+                          });
                         }, 800);
                       }
                     }
@@ -914,7 +990,7 @@ const App = () => {
                   for (const nodeId in outputs) {
                     if (outputs[nodeId].images && outputs[nodeId].images[0]) {
                       const img = outputs[nodeId].images[0];
-                      const hqImageUrl = `${COMFYUI_API}/view?filename=${img.filename}&subfolder=${img.subfolder}&type=${img.type}`;
+                      const hqImageUrl = `${COMFYUI_API}/view?filename=${img.filename}&subfolder=${img.subfolder}&type=${img.type}&t=${Date.now()}`;
 
                       // 更新占位符，替换为高清图片
                       updateImagePlaceholders(prev => prev.map(p =>
@@ -1036,8 +1112,9 @@ const App = () => {
     ));
 
     // 使用ref同步检查，避免竞态条件
-    if (!isUpscalingRef.current) {
-      // 队列为空，直接开始
+    // 如果启用了生图队列优先，且当前正在生成，只添加到队列不立即执行
+    if (!isUpscalingRef.current && !(prioritizeGeneration && isGenerating)) {
+      // 队列为空且（没有启用优先级或没有正在生成），直接开始
       isUpscalingRef.current = true;
       setIsUpscaling(true);
       upscaleImage(placeholderId);
@@ -1499,6 +1576,27 @@ const App = () => {
               )}
             </div>
           </details>
+
+          {/* 队列控制设置 */}
+          <div className="queue-controls">
+            <label className="queue-control-item">
+              <input
+                type="checkbox"
+                checked={prioritizeGeneration}
+                onChange={(e) => setPrioritizeGeneration(e.target.checked)}
+              />
+              <span className="queue-control-label">生图队列优先</span>
+            </label>
+
+            <label className="queue-control-item">
+              <input
+                type="checkbox"
+                checked={autoUpscaleAfterGen}
+                onChange={(e) => setAutoUpscaleAfterGen(e.target.checked)}
+              />
+              <span className="queue-control-label">生图后自动高清化</span>
+            </label>
+          </div>
 
           {/* 错误信息 */}
           {error && <div className="error">{error}</div>}
