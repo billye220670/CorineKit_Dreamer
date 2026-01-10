@@ -558,7 +558,7 @@ body {
 
 /* 亮色模式适配 */
 .light-mode .title {
-  background: linear-gradient(135deg, hsl(0, 0%, 35%) 0%, hsl(0, 0%, 45%) 50%, hsl(0, 0%, 40%) 100%);
+  background: linear-gradient(135deg, hsl(0, 0%, 15%) 0%, hsl(0, 0%, 22%) 50%, hsl(0, 0%, 18%) 100%);
   -webkit-background-clip: text;
   background-clip: text;
 }
@@ -1025,20 +1025,24 @@ body {
   letter-spacing: 0.05em;
   transition: all 0.3s ease;
   list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .advanced-settings-summary::-webkit-details-marker {
   display: none;
 }
 
-.advanced-settings-summary::before {
-  content: '▶';
+/* 展开/折叠箭头 */
+.advanced-settings-toggle {
   display: inline-block;
-  margin-right: 8px;
   transition: transform 0.3s ease;
+  flex-shrink: 0;
+  cursor: pointer;
 }
 
-.advanced-settings[open] .advanced-settings-summary::before {
+.advanced-settings[open] .advanced-settings-toggle {
   transform: rotate(90deg);
 }
 
@@ -1122,11 +1126,11 @@ body {
 
 /* 浅色模式下高级设置分区标题变深色 */
 .light-mode .settings-group-title {
-  color: hsl(0, 0%, 35%);
+  color: hsl(0, 0%, 20%);
 }
 
 .light-mode .settings-group-summary::before {
-  color: hsl(0, 0%, 35%);
+  color: hsl(0, 0%, 20%);
 }
 
 .settings-group-content {
@@ -1937,16 +1941,17 @@ body {
 
 /* ==================== 设置预设样式 ==================== */
 
-/* 预设选择器容器 - 放在summary内部 */
+/* 预设选择器容器 - 撑满整个summary宽度 */
 .preset-selector-wrapper {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 8px;
   position: relative;
   z-index: 100;
+  width: 100%;
 }
 
-/* 预设选择器主体 */
+/* 预设选择器主体 - 撑满剩余空间 */
 .preset-selector {
   display: flex;
   align-items: center;
@@ -1957,7 +1962,8 @@ body {
   border-radius: 6px;
   cursor: pointer;
   transition: all 0.2s ease;
-  min-width: 120px;
+  flex: 1;
+  min-width: 0;
 }
 
 .preset-selector:hover {
@@ -1973,7 +1979,6 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 150px;
 }
 
 .preset-arrow {
@@ -2122,13 +2127,6 @@ body {
   transform: scale(1.1);
 }
 
-/* 高级设置文字（与预设选择器并排） */
-.advanced-settings-text {
-  margin-left: 12px;
-  color: var(--theme-text);
-  opacity: 0.8;
-}
-
 /* ==================== 新建预设模态框 ==================== */
 
 .preset-modal-overlay {
@@ -2271,4 +2269,74 @@ body {
 .preset-save-button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* 禁用状态的预设选择器 */
+.preset-selector.disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.preset-selector.disabled:hover {
+  border-color: var(--theme-border);
+  background: hsla(var(--theme-hue), 30%, 20%, 0.8);
+}
+
+/* ==================== 亮色模式适配 ==================== */
+/* 亮灰色定义：hsl(0, 0%, 85%) - 统一使用，方便后续修改 */
+
+/* 亮色模式 - 预设选择器 */
+.light-mode .preset-selector {
+  background: hsl(0, 0%, 85%);
+}
+
+.light-mode .preset-selector:hover {
+  background: hsl(0, 0%, 80%);
+}
+
+.light-mode .preset-selector.disabled:hover {
+  background: hsl(0, 0%, 85%);
+}
+
+/* 亮色模式 - 预设下拉菜单 */
+.light-mode .preset-dropdown {
+  background: hsl(0, 0%, 95%);
+}
+
+.light-mode .preset-option:hover {
+  background: hsl(0, 0%, 88%);
+}
+
+.light-mode .preset-option.active {
+  background: hsla(var(--theme-hue), 40%, 80%, 0.5);
+}
+
+/* 亮色模式 - 新建预设输入框 */
+.light-mode .preset-name-input {
+  background: hsl(0, 0%, 85%);
+  color: hsl(0, 0%, 20%);
+  border-color: hsl(0, 0%, 70%);
+}
+
+.light-mode .preset-name-input:focus {
+  background: hsl(0, 0%, 100%);
+  border-color: var(--theme-primary);
+}
+
+.light-mode .preset-name-input::placeholder {
+  color: hsl(0, 0%, 50%);
+}
+
+/* 亮色模式 - 保存按钮文字色 */
+.light-mode .preset-save-button {
+  color: hsl(0, 0%, 20%);
+}
+
+/* 亮色模式 - 图片控制栏按钮 */
+.light-mode .multi-select-button {
+  background: hsl(0, 0%, 85%);
+}
+
+.light-mode .batch-action-button {
+  background: hsl(0, 0%, 85%);
 }
