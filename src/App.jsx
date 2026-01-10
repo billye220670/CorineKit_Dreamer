@@ -90,6 +90,18 @@ const App = () => {
   const [isMultiSelectMode, setIsMultiSelectMode] = useState(false); // 多选模式
   const [selectedImages, setSelectedImages] = useState(new Set()); // 选中的图片ID集合
 
+  // 设置预设相关状态
+  const [settingsPresets, setSettingsPresets] = useState(() =>
+    loadFromStorage('corineGen_settingsPresets', [])
+  );
+  const [activePresetId, setActivePresetId] = useState(() =>
+    loadFromStorage('corineGen_activePresetId', null)
+  );
+  const [showPresetDropdown, setShowPresetDropdown] = useState(false);
+  const [showNewPresetPanel, setShowNewPresetPanel] = useState(false);
+  const [newPresetName, setNewPresetName] = useState('');
+  const [hoveredPresetId, setHoveredPresetId] = useState(null);
+
   const firstSeedRef = useRef(null);
   const heartbeatRef = useRef(null); // 心跳检测定时器
 
@@ -237,6 +249,177 @@ const App = () => {
   useEffect(() => {
     localStorage.setItem('corineGen_scheduler', JSON.stringify(scheduler));
   }, [scheduler]);
+
+  // 预设相关 - localStorage持久化
+  useEffect(() => {
+    localStorage.setItem('corineGen_settingsPresets', JSON.stringify(settingsPresets));
+  }, [settingsPresets]);
+
+  useEffect(() => {
+    localStorage.setItem('corineGen_activePresetId', JSON.stringify(activePresetId));
+  }, [activePresetId]);
+
+  // 获取当前所有预设参数的快照
+  const getCurrentSettingsSnapshot = () => ({
+    batchSize,
+    steps,
+    samplerName,
+    scheduler,
+    loraEnabled,
+    loraName,
+    loraStrengthModel,
+    loraStrengthClip,
+    resolutionScale,
+    aspectRatio,
+    seedMode,
+    fixedSeed,
+    firstFixedSeed,
+  });
+
+  // 保存当前设置为预设
+  const saveCurrentAsPreset = (name) => {
+    const existingIndex = settingsPresets.findIndex(p => p.name === name);
+    const now = Date.now();
+
+    if (existingIndex >= 0) {
+      // 名称重复 → 覆盖已有预设
+      const updatedPresets = [...settingsPresets];
+      updatedPresets[existingIndex] = {
+        ...updatedPresets[existingIndex],
+        updatedAt: now,
+        settings: getCurrentSettingsSnapshot(),
+      };
+      setSettingsPresets(updatedPresets);
+      setActivePresetId(updatedPresets[existingIndex].id);
+    } else {
+      // 创建新预设
+      const newPreset = {
+        id: `preset_${now}`,
+        name,
+        createdAt: now,
+        updatedAt: now,
+        settings: getCurrentSettingsSnapshot(),
+      };
+      setSettingsPresets(prev => [...prev, newPreset]);
+      setActivePresetId(newPreset.id);
+    }
+
+    setShowNewPresetPanel(false);
+    setNewPresetName('');
+    setShowPresetDropdown(false);
+  };
+
+  // 加载预设
+  const loadPreset = (presetId) => {
+    const preset = settingsPresets.find(p => p.id === presetId);
+    if (!preset) return;
+
+    const { settings } = preset;
+
+    // 检查LoRA可用性
+    if (settings.loraEnabled && settings.loraName) {
+      const loraAvailable = enabledLoras.some(lora => {
+        const loraValue = typeof lora === 'string' ? lora : lora.name;
+        return loraValue === settings.loraName;
+      });
+
+      if (!loraAvailable) {
+        alert(`预设中的 LoRA "${settings.loraName}" 不可用，已禁用 LoRA 设置`);
+        // 仍然加载其他设置，但禁用LoRA
+        setBatchSize(settings.batchSize);
+        setSteps(settings.steps);
+        setSamplerName(settings.samplerName);
+        setScheduler(settings.scheduler);
+        setLoraEnabled(false);  // 禁用LoRA
+        setResolutionScale(settings.resolutionScale);
+        setAspectRatio(settings.aspectRatio);
+        setSeedMode(settings.seedMode);
+        setFixedSeed(settings.fixedSeed);
+        setFirstFixedSeed(settings.firstFixedSeed);
+        setActivePresetId(null);  // 因为LoRA不匹配，变为自定义状态
+        setShowPresetDropdown(false);
+        return;
+      }
+    }
+
+    // 正常加载所有设置
+    setBatchSize(settings.batchSize);
+    setSteps(settings.steps);
+    setSamplerName(settings.samplerName);
+    setScheduler(settings.scheduler);
+    setLoraEnabled(settings.loraEnabled);
+    setLoraName(settings.loraName);
+    setLoraStrengthModel(settings.loraStrengthModel);
+    setLoraStrengthClip(settings.loraStrengthClip);
+    setResolutionScale(settings.resolutionScale);
+    setAspectRatio(settings.aspectRatio);
+    setSeedMode(settings.seedMode);
+    setFixedSeed(settings.fixedSeed);
+    setFirstFixedSeed(settings.firstFixedSeed);
+
+    setActivePresetId(presetId);
+    setShowPresetDropdown(false);
+  };
+
+  // 删除预设
+  const deletePreset = (presetId) => {
+    setSettingsPresets(prev => prev.filter(p => p.id !== presetId));
+
+    // 如果删除的是当前使用的预设，变为"自定义"状态
+    if (activePresetId === presetId) {
+      setActivePresetId(null);
+    }
+  };
+
+  // 参数变更检测 - 使预设变为"自定义"状态
+  useEffect(() => {
+    if (activePresetId) {
+      const preset = settingsPresets.find(p => p.id === activePresetId);
+      if (!preset) {
+        setActivePresetId(null);
+        return;
+      }
+
+      const current = getCurrentSettingsSnapshot();
+      const saved = preset.settings;
+
+      // 深度比较所有参数
+      const isDifferent =
+        current.batchSize !== saved.batchSize ||
+        current.steps !== saved.steps ||
+        current.samplerName !== saved.samplerName ||
+        current.scheduler !== saved.scheduler ||
+        current.loraEnabled !== saved.loraEnabled ||
+        current.loraName !== saved.loraName ||
+        current.loraStrengthModel !== saved.loraStrengthModel ||
+        current.loraStrengthClip !== saved.loraStrengthClip ||
+        current.resolutionScale !== saved.resolutionScale ||
+        current.aspectRatio !== saved.aspectRatio ||
+        current.seedMode !== saved.seedMode ||
+        current.fixedSeed !== saved.fixedSeed ||
+        current.firstFixedSeed !== saved.firstFixedSeed;
+
+      if (isDifferent) {
+        setActivePresetId(null);
+      }
+    }
+  }, [
+    batchSize, steps, samplerName, scheduler,
+    loraEnabled, loraName, loraStrengthModel, loraStrengthClip,
+    resolutionScale, aspectRatio, seedMode, fixedSeed, firstFixedSeed
+  ]);
+
+  // 点击外部关闭预设下拉菜单
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (showPresetDropdown && !e.target.closest('.preset-selector-wrapper')) {
+        setShowPresetDropdown(false);
+      }
+    };
+
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, [showPresetDropdown]);
 
   // 获取可用的LoRA列表
   useEffect(() => {
@@ -1787,7 +1970,65 @@ const App = () => {
 
           {/* 高级设置折叠栏 */}
           <details className="advanced-settings">
-            <summary className="advanced-settings-summary">高级设置</summary>
+            <summary className="advanced-settings-summary">
+              {/* 预设选择器 - 点击外部区域仍可展开/折叠 */}
+              <div className="preset-selector-wrapper" onClick={(e) => e.stopPropagation()}>
+                <div
+                  className="preset-selector"
+                  onClick={() => setShowPresetDropdown(!showPresetDropdown)}
+                >
+                  <span className="preset-current-name">
+                    {activePresetId
+                      ? settingsPresets.find(p => p.id === activePresetId)?.name || '自定义'
+                      : '自定义'}
+                  </span>
+                  <span className={`preset-arrow ${showPresetDropdown ? 'open' : ''}`}>▼</span>
+                </div>
+
+                <button
+                  className="preset-add-button"
+                  onClick={() => setShowNewPresetPanel(true)}
+                  title="新建预设"
+                >
+                  +
+                </button>
+
+                {/* 预设下拉菜单 */}
+                {showPresetDropdown && (
+                  <div className="preset-dropdown">
+                    {settingsPresets.length === 0 ? (
+                      <div className="preset-empty">暂无预设，点击 + 创建</div>
+                    ) : (
+                      settingsPresets.map(preset => (
+                        <div
+                          key={preset.id}
+                          className={`preset-option ${activePresetId === preset.id ? 'active' : ''}`}
+                          onMouseEnter={() => setHoveredPresetId(preset.id)}
+                          onMouseLeave={() => setHoveredPresetId(null)}
+                          onClick={() => loadPreset(preset.id)}
+                        >
+                          <span className="preset-option-name">{preset.name}</span>
+                          {hoveredPresetId === preset.id && (
+                            <button
+                              className="preset-delete-button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                deletePreset(preset.id);
+                              }}
+                            >
+                              ×
+                            </button>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* 保留原有的折叠指示器文字 */}
+              <span className="advanced-settings-text">高级设置</span>
+            </summary>
             <div className="advanced-settings-content">
 
               {/* 生成设置分组 */}
@@ -2439,6 +2680,56 @@ const App = () => {
         </div>
         </div>
       </div>
+
+      {/* 新建预设面板 */}
+      {showNewPresetPanel && (
+        <div className="preset-modal-overlay" onClick={() => setShowNewPresetPanel(false)}>
+          <div className="preset-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="preset-modal-header">
+              <h3>保存当前设置为预设</h3>
+              <button
+                className="preset-modal-close"
+                onClick={() => setShowNewPresetPanel(false)}
+              >
+                ×
+              </button>
+            </div>
+            <div className="preset-modal-content">
+              <input
+                type="text"
+                className="preset-name-input"
+                placeholder="输入预设名称..."
+                value={newPresetName}
+                onChange={(e) => setNewPresetName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && newPresetName.trim()) {
+                    saveCurrentAsPreset(newPresetName.trim());
+                  }
+                }}
+                autoFocus
+              />
+            </div>
+            <div className="preset-modal-actions">
+              <button
+                className="preset-cancel-button"
+                onClick={() => {
+                  setShowNewPresetPanel(false);
+                  setNewPresetName('');
+                }}
+              >
+                取消
+              </button>
+              <button
+                className="preset-save-button"
+                disabled={!newPresetName.trim()}
+                onClick={() => saveCurrentAsPreset(newPresetName.trim())}
+              >
+                保存
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

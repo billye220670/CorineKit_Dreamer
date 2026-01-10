@@ -1934,3 +1934,341 @@ body {
     grid-template-columns: 1fr;
   }
 }
+
+/* ==================== 设置预设样式 ==================== */
+
+/* 预设选择器容器 - 放在summary内部 */
+.preset-selector-wrapper {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+  z-index: 100;
+}
+
+/* 预设选择器主体 */
+.preset-selector {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: hsla(var(--theme-hue), 30%, 20%, 0.8);
+  border: 1px solid var(--theme-border);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-width: 120px;
+}
+
+.preset-selector:hover {
+  border-color: var(--theme-border-hover);
+  background: hsla(var(--theme-hue), 30%, 25%, 0.9);
+}
+
+.preset-current-name {
+  flex: 1;
+  color: var(--theme-text);
+  font-size: 0.9rem;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 150px;
+}
+
+.preset-arrow {
+  color: var(--theme-text);
+  font-size: 0.7rem;
+  opacity: 0.7;
+  transition: transform 0.2s ease;
+}
+
+.preset-arrow.open {
+  transform: rotate(180deg);
+}
+
+/* 添加预设按钮 */
+.preset-add-button {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--theme-primary);
+  border: none;
+  color: white;
+  font-size: 1.2rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.preset-add-button:hover {
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+/* 预设下拉菜单 */
+.preset-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  min-width: 200px;
+  max-width: 280px;
+  background: rgba(30, 30, 35, 0.98);
+  border: 1px solid var(--theme-border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(10px);
+  z-index: 1000;
+  animation: presetDropdownIn 0.15s ease-out;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+@keyframes presetDropdownIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.preset-dropdown::-webkit-scrollbar {
+  width: 6px;
+}
+
+.preset-dropdown::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.preset-dropdown::-webkit-scrollbar-thumb {
+  background: var(--theme-primary);
+  border-radius: 3px;
+}
+
+/* 空状态提示 */
+.preset-empty {
+  padding: 16px;
+  color: var(--theme-text);
+  opacity: 0.6;
+  text-align: center;
+  font-size: 0.85rem;
+}
+
+/* 预设选项 */
+.preset-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.preset-option:last-child {
+  border-bottom: none;
+}
+
+.preset-option:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.preset-option.active {
+  background: hsla(var(--theme-hue), 50%, 40%, 0.3);
+}
+
+.preset-option-name {
+  color: var(--theme-text);
+  font-size: 0.9rem;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 删除按钮 */
+.preset-delete-button {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(220, 38, 38, 0.8);
+  border: none;
+  color: white;
+  font-size: 1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: all 0.2s ease;
+  margin-left: 8px;
+  flex-shrink: 0;
+}
+
+.preset-option:hover .preset-delete-button {
+  opacity: 1;
+}
+
+.preset-delete-button:hover {
+  background: rgba(220, 38, 38, 1);
+  transform: scale(1.1);
+}
+
+/* 高级设置文字（与预设选择器并排） */
+.advanced-settings-text {
+  margin-left: 12px;
+  color: var(--theme-text);
+  opacity: 0.8;
+}
+
+/* ==================== 新建预设模态框 ==================== */
+
+.preset-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.preset-modal {
+  background: var(--theme-bg-card);
+  border: 1px solid var(--theme-border);
+  border-radius: 12px;
+  width: 90%;
+  max-width: 400px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  animation: modalSlideIn 0.25s ease-out;
+}
+
+@keyframes modalSlideIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.preset-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--theme-border);
+}
+
+.preset-modal-header h3 {
+  color: var(--theme-text);
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.preset-modal-close {
+  background: none;
+  border: none;
+  color: var(--theme-text);
+  font-size: 1.5rem;
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+  padding: 0;
+  line-height: 1;
+}
+
+.preset-modal-close:hover {
+  opacity: 1;
+}
+
+.preset-modal-content {
+  padding: 20px;
+}
+
+.preset-name-input {
+  width: 100%;
+  padding: 12px 14px;
+  background: hsla(var(--theme-hue), 20%, 15%, 0.8);
+  border: 2px solid var(--theme-border);
+  border-radius: 8px;
+  color: var(--theme-text);
+  font-size: 1rem;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+}
+
+.preset-name-input:focus {
+  outline: none;
+  border-color: var(--theme-border-hover);
+  box-shadow: 0 0 15px var(--theme-border);
+}
+
+.preset-name-input::placeholder {
+  color: var(--theme-text);
+  opacity: 0.4;
+}
+
+.preset-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 20px;
+  border-top: 1px solid var(--theme-border);
+}
+
+.preset-cancel-button,
+.preset-save-button {
+  padding: 10px 20px;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.preset-cancel-button {
+  background: transparent;
+  border: 1px solid var(--theme-border);
+  color: var(--theme-text);
+}
+
+.preset-cancel-button:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.preset-save-button {
+  background: var(--theme-primary);
+  border: none;
+  color: white;
+}
+
+.preset-save-button:hover:not(:disabled) {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+}
+
+.preset-save-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
