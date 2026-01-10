@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import Masonry from 'react-masonry-css';
+import { ClipboardPaste, ArrowRight, Image, Settings, Check } from 'lucide-react';
 import './App.css';
 import workflowTemplate from '../CorineGen.json';
 import upscaleTemplate from '../ImageUpscaleAPI.json';
@@ -1751,7 +1752,7 @@ const App = () => {
             onClick={() => setShowSettingsPanel(!showSettingsPanel)}
             title="设置"
           >
-            ⚙️
+            <Settings size={20} />
           </button>
           {showSettingsPanel && (
             <>
@@ -1941,7 +1942,7 @@ const App = () => {
                     }}
                     title="粘贴剪贴板内容"
                   >
-                    📋
+                    <ClipboardPaste size={16} />
                   </button>
 
                   {/* 发送按钮 - 始终显示在右下角 */}
@@ -1951,7 +1952,7 @@ const App = () => {
                     disabled={!promptItem.text.trim()}
                     title="发送生成"
                   >
-                    →
+                    <ArrowRight size={18} />
                   </button>
                 </div>
               </div>
@@ -1964,25 +1965,42 @@ const App = () => {
               className="generate-all-button"
               onClick={generateAll}
             >
-              → 全部生成
+              <ArrowRight size={18} /> 全部生成
             </button>
           </div>
 
           {/* 高级设置折叠栏 */}
           <details className="advanced-settings">
-            <summary className="advanced-settings-summary">
-              {/* 预设选择器 - 点击外部区域仍可展开/折叠 */}
-              <div className="preset-selector-wrapper" onClick={(e) => e.stopPropagation()}>
+            <summary className="advanced-settings-summary" onClick={(e) => {
+              // 只有点击箭头区域才触发展开/折叠，其他区域都阻止
+              const isToggle = e.target.closest('.advanced-settings-toggle');
+              if (!isToggle) {
+                e.preventDefault();
+                e.stopPropagation();
+              }
+            }}>
+              {/* 展开/折叠箭头 */}
+              <span className="advanced-settings-toggle">▶</span>
+
+              {/* 预设选择器 */}
+              <div className="preset-selector-wrapper">
                 <div
-                  className="preset-selector"
-                  onClick={() => setShowPresetDropdown(!showPresetDropdown)}
+                  className={`preset-selector ${settingsPresets.length === 0 ? 'disabled' : ''}`}
+                  onClick={() => {
+                    // 没有预设时不打开下拉框
+                    if (settingsPresets.length > 0) {
+                      setShowPresetDropdown(!showPresetDropdown);
+                    }
+                  }}
                 >
                   <span className="preset-current-name">
                     {activePresetId
                       ? settingsPresets.find(p => p.id === activePresetId)?.name || '自定义'
                       : '自定义'}
                   </span>
-                  <span className={`preset-arrow ${showPresetDropdown ? 'open' : ''}`}>▼</span>
+                  {settingsPresets.length > 0 && (
+                    <span className={`preset-arrow ${showPresetDropdown ? 'open' : ''}`}>▼</span>
+                  )}
                 </div>
 
                 <button
@@ -1994,40 +2012,33 @@ const App = () => {
                 </button>
 
                 {/* 预设下拉菜单 */}
-                {showPresetDropdown && (
+                {showPresetDropdown && settingsPresets.length > 0 && (
                   <div className="preset-dropdown">
-                    {settingsPresets.length === 0 ? (
-                      <div className="preset-empty">暂无预设，点击 + 创建</div>
-                    ) : (
-                      settingsPresets.map(preset => (
-                        <div
-                          key={preset.id}
-                          className={`preset-option ${activePresetId === preset.id ? 'active' : ''}`}
-                          onMouseEnter={() => setHoveredPresetId(preset.id)}
-                          onMouseLeave={() => setHoveredPresetId(null)}
-                          onClick={() => loadPreset(preset.id)}
-                        >
-                          <span className="preset-option-name">{preset.name}</span>
-                          {hoveredPresetId === preset.id && (
-                            <button
-                              className="preset-delete-button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                deletePreset(preset.id);
-                              }}
-                            >
-                              ×
-                            </button>
-                          )}
-                        </div>
-                      ))
-                    )}
+                    {settingsPresets.map(preset => (
+                      <div
+                        key={preset.id}
+                        className={`preset-option ${activePresetId === preset.id ? 'active' : ''}`}
+                        onMouseEnter={() => setHoveredPresetId(preset.id)}
+                        onMouseLeave={() => setHoveredPresetId(null)}
+                        onClick={() => loadPreset(preset.id)}
+                      >
+                        <span className="preset-option-name">{preset.name}</span>
+                        {hoveredPresetId === preset.id && (
+                          <button
+                            className="preset-delete-button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deletePreset(preset.id);
+                            }}
+                          >
+                            ×
+                          </button>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
-
-              {/* 保留原有的折叠指示器文字 */}
-              <span className="advanced-settings-text">高级设置</span>
             </summary>
             <div className="advanced-settings-content">
 
@@ -2500,7 +2511,7 @@ const App = () => {
               onClick={() => isMultiSelectMode ? exitMultiSelectMode() : setIsMultiSelectMode(true)}
               title={isMultiSelectMode ? '退出多选' : '多选'}
             >
-              {isMultiSelectMode ? '✓ 完成' : '☑ 多选'}
+              {isMultiSelectMode ? '完成' : '多选'}
             </button>
             <button
               className="view-toggle-button"
@@ -2533,7 +2544,7 @@ const App = () => {
                           className={`selection-indicator ${selectedImages.has(placeholder.id) ? 'checked' : ''}`}
                           onClick={() => toggleImageSelection(placeholder.id)}
                         >
-                          {selectedImages.has(placeholder.id) ? '✓' : ''}
+                          {selectedImages.has(placeholder.id) ? <Check size={14} strokeWidth={3} /> : ''}
                         </div>
                       )}
                       {/* 背景图片 */}
@@ -2673,7 +2684,7 @@ const App = () => {
           ) : (
             // 无图像时的占位区域
             <div className="empty-placeholder">
-              <div className="empty-icon">🖼️</div>
+              <div className="empty-icon"><Image size={64} strokeWidth={1} /></div>
               <p className="empty-text">生成的图像将在这里显示</p>
             </div>
           )}
