@@ -429,20 +429,17 @@ const App = () => {
   }, [showPresetDropdown]);
 
   // 获取可用的LoRA列表
-  useEffect(() => {
-    const fetchAvailableLoras = async () => {
-      try {
-        const response = await fetch(`${COMFYUI_API}/object_info/LoraLoader`);
-        const data = await response.json();
-        if (data.LoraLoader?.input?.required?.lora_name?.[0]) {
-          setAvailableLoras(data.LoraLoader.input.required.lora_name[0]);
-        }
-      } catch (error) {
-        console.error('获取LoRA列表失败:', error);
+  const fetchAvailableLoras = async () => {
+    try {
+      const response = await fetch(`${COMFYUI_API}/object_info/LoraLoader`);
+      const data = await response.json();
+      if (data.LoraLoader?.input?.required?.lora_name?.[0]) {
+        setAvailableLoras(data.LoraLoader.input.required.lora_name[0]);
       }
-    };
-    fetchAvailableLoras();
-  }, []);
+    } catch (error) {
+      console.error('获取LoRA列表失败:', error);
+    }
+  };
 
   // 启动心跳检测
   const startHeartbeat = () => {
@@ -485,6 +482,7 @@ const App = () => {
           setConnectionMessage(`ComfyUI 正在 127.0.0.1:8188 运行，一切就绪`);
           setShowNotification(true);
           setTimeout(() => setShowNotification(false), 3000);
+          fetchAvailableLoras(); // 连接成功后刷新LoRA列表
         }
         startHeartbeat();
       } else {
