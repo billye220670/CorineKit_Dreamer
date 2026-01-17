@@ -5,15 +5,49 @@
 ## 项目概览
 
 **名称**: CorineGen - AI 图像生成器
-**类型**: React 单页应用 (SPA) + Node.js 后端
+**架构**: React 前端 + Node.js 后端（前后端分离）
 **用途**: ComfyUI 的 Web 前端界面，用于生成和管理 AI 图像
 **当前版本**: 1.0.0
 **主要语言**: JavaScript (JSX)
 
-## 架构
+## 架构说明
+
+### 完整架构
 
 ```
 远端用户 ──> Vercel (前端) ──> 花生壳 ──> 本机后端 ──> ComfyUI
+                 ↓                        ↓             ↓
+            React SPA              Express Proxy   WebSocket API
+          (静态部署)              (HTTP + WS)       (图像生成)
+```
+
+### 三层结构
+
+1. **前端层 (Vercel)**
+   - React 18 + Vite 构建
+   - 静态文件部署
+   - 环境变量配置后端地址
+
+2. **后端层 (本机)**
+   - Express HTTP/WebSocket 代理
+   - CORS 处理
+   - 请求转发到 ComfyUI
+   - 监听 `0.0.0.0:3001`
+
+3. **AI 层 (ComfyUI)**
+   - 运行在 `127.0.0.1:8188`
+   - 提供图像生成 API
+
+### 网络流程
+
+**开发环境**:
+```
+浏览器 (localhost:5173) ──> Vite Proxy ──> Backend (3001) ──> ComfyUI (8188)
+```
+
+**生产环境**:
+```
+浏览器 ──> Vercel ──> 花生壳 (6802gd0yf444.vicp.fun) ──> Backend ──> ComfyUI
 ```
 
 ## 技术栈
@@ -22,11 +56,13 @@
 - **React 18.2.0** - UI 框架
 - **Vite 5.0.8** - 构建工具和开发服务器
 - **Lucide React 0.562.0** - 图标库
+- **React Masonry CSS** - 瀑布流布局
 
 ### 后端 (backend/)
-- **Node.js + Express** - HTTP/WebSocket 代理服务器
+- **Node.js + Express** - HTTP 服务器
 - **ws** - WebSocket 代理
-- **http-proxy-middleware** - HTTP 代理
+- **http-proxy-middleware** - HTTP 代理中间件
+- **cors** - CORS 处理
 
 ### 数据持久化
 - **localStorage** - 保存用户设置、提示词、主题配置等
@@ -64,16 +100,14 @@ CorineGen/
 ├── backend/                        # 后端 (本机部署)
 │   ├── src/
 │   │   ├── index.js               # Express 入口
-│   │   ├── middleware/
-│   │   │   └── auth.js            # API Key 认证
 │   │   └── proxy/
 │   │       └── wsProxy.js         # WebSocket 代理
 │   ├── package.json
-│   └── .env.example
+│   └── .env                       # 环境变量配置
 │
 ├── docs/
 │   └── deployment.md              # 部署指南
-├── CLAUDE.md                      # AI 助手指南
+├── CLAUDE.md                      # AI 助手指南（本文件）
 ├── README.md                      # 用户文档
 └── DEVELOPMENT.md                 # 开发文档
 ```
@@ -144,7 +178,7 @@ const checkConnection = async (silent = false) => { ... }
 - **图生图 (Image2Image)**: 直接使用参考图片进行图像到图像转换
 - **ControlNet**: 使用参考图片的线稿/深度/姿势进行控制生成
 - 工作流文件: `Image2ImageAPI.json`, `ZIT_CNN_API.json`
-- 降噪强度暂时写死 `IMG2IMG_DENOISE = 0.6`
+- 降噪强度默认 `IMG2IMG_DENOISE = 1`
 - 不支持 LoRA，忽略用户的 LoRA 设置
 - 输出尺寸跟随输入图片
 - 支持批量生成（仅循环模式）
@@ -159,22 +193,62 @@ const checkConnection = async (silent = false) => { ... }
 - 使用图片深度 → `ZIT_CNN_API.json` (index=1)
 - 使用图片姿势 → `ZIT_CNN_API.json` (index=2)
 
+## API 配置与认证
+
+### 环境判断
+
+```javascript
+// frontend/src/config/api.js
+const isDevelopment = import.meta.env.DEV;
+
+const baseUrl = isDevelopment
+  ? ''  // 开发环境使用 Vite 代理
+  : (import.meta.env.VITE_BACKEND_URL || '');  // 生产环境使用环境变量
+```
+
+### 认证状态
+
+**当前**: 无认证（已移除 API Key）
+
+```javascript
+// frontend/src/config/api.js:64-66
+export function isAuthRequired() {
+  return false;  // 始终返回 false
+}
+```
+
+### 后端配置
+
+**backend/.env**:
+```bash
+COMFYUI_HOST=http://127.0.0.1:8188
+PORT=3001
+ALLOWED_ORIGINS=http://localhost:5173,https://corine-gen.vercel.app
+```
+
+**CORS 配置** (backend/src/index.js:20-31):
+- 允许配置的域名访问
+- 支持凭证 (credentials: true)
+- 后端监听 `0.0.0.0:3001` 以支持花生壳穿透
+
 ## 关键代码位置速查
 
 | 功能 | 文件 | 行号 |
 |------|------|------|
+| API 配置 | config/api.js | 全文 |
+| HTTP 客户端 | services/apiClient.js | 全文 |
+| WebSocket 客户端 | services/wsClient.js | 全文 |
+| 后端入口 | backend/src/index.js | 全文 |
+| WebSocket 代理 | backend/src/proxy/wsProxy.js | 全文 |
 | ComfyUI 连接检查 | App.jsx | 530-570 |
 | LoRA 列表获取 | App.jsx | 512-524 |
 | 图像生成队列 | App.jsx | 972-1042 |
 | 高清化队列 | App.jsx | 1541-1650 |
 | 图生图工作流构建 | App.jsx | 1477-1508 |
 | ControlNet工作流构建 | App.jsx | 1510-1539 |
-| 图生图/CN生成循环 | App.jsx | 1475-1706 |
 | 参考图片上传处理 | App.jsx | 625-670 |
 | 主题管理 | App.jsx | 139-151, App.css:1-50 |
-| localStorage 持久化 | App.jsx | 50-75 (loadFromStorage) |
-| 提示词框 UI | App.jsx | 2064-2216 |
-| 参考图片CSS样式 | App.css | 785-964 |
+| localStorage 持久化 | App.jsx | 50-75 |
 
 ## 重要实现细节
 
@@ -187,9 +261,14 @@ const processingRef = useRef(false);
 
 ### 2. WebSocket 连接管理
 ```javascript
-const ws = new WebSocket(`${COMFYUI_WS}?clientId=${clientId}`);
+// 前端连接到后端
+const ws = new WebSocket(`${COMFYUI_WS}/ws?clientId=${clientId}`);
+
+// 后端代理到 ComfyUI
+const comfyWs = new WebSocket(`${wsHost}/ws?clientId=${clientId}`);
 ```
 - 使用唯一 clientId 识别连接
+- 前端 → 后端 → ComfyUI 的双层代理
 - 监听进度事件: `execution_start`, `progress`, `executing`
 
 ### 3. 图片下载文件名规范
@@ -209,6 +288,60 @@ await fetch(`${COMFYUI_API}/upload/image`, { ... });
 **修复记录**: 2026-01-12
 - 问题: 重新连接后 LoRA 列表未刷新
 - 解决: 在 `checkConnection` 成功后调用 `fetchAvailableLoras()`
+
+## 部署流程
+
+### 开发环境
+
+1. **启动后端**:
+```bash
+cd backend
+npm install
+npm run dev  # 监听 3001 端口
+```
+
+2. **启动前端**:
+```bash
+cd frontend
+npm install
+npm run dev  # 访问 localhost:5173
+```
+
+### 生产环境
+
+**后端（本机）**:
+1. 配置 `.env` 文件，添加 Vercel 域名到 `ALLOWED_ORIGINS`
+2. 使用 PM2 启动: `pm2 start src/index.js --name corinegen-backend`
+3. 配置花生壳：内网端口 `3001`，外网域名 `6802gd0yf444.vicp.fun`
+
+**前端（Vercel）**:
+1. 推送代码到 GitHub
+2. Vercel 导入项目，Root Directory 设为 `frontend`
+3. 添加环境变量：
+   - `VITE_BACKEND_URL=https://6802gd0yf444.vicp.fun`
+   - `VITE_BACKEND_WS_URL=wss://6802gd0yf444.vicp.fun`
+4. 部署
+
+## API 端点
+
+### 后端代理端点
+
+- `GET /health` - 健康检查（无需认证）
+- `GET /api/system_stats` - 转发到 ComfyUI 系统状态
+- `GET /api/object_info/LoraLoader` - 转发到 ComfyUI LoRA 列表
+- `POST /api/prompt` - 转发到 ComfyUI 提交任务
+- `POST /api/upload/image` - 转发到 ComfyUI 上传图片
+- `GET /api/view?filename={name}` - 转发到 ComfyUI 获取图片
+- `WS /ws?clientId={id}` - WebSocket 代理
+
+### ComfyUI 原始端点
+
+- `GET http://127.0.0.1:8188/system_stats` - 系统状态
+- `GET http://127.0.0.1:8188/object_info/LoraLoader` - LoRA 列表
+- `POST http://127.0.0.1:8188/prompt` - 提交任务
+- `POST http://127.0.0.1:8188/upload/image` - 上传图片
+- `GET http://127.0.0.1:8188/view` - 获取图片
+- `WS ws://127.0.0.1:8188/ws` - WebSocket 进度推送
 
 ## 开发规范
 
@@ -244,6 +377,16 @@ await fetch(`${COMFYUI_API}/upload/image`, { ... });
 3. 在 App.css 中添加样式
 4. 考虑是否需要 localStorage 持久化
 
+### 修改后端配置
+1. 编辑 `backend/.env` 文件
+2. 重启后端服务
+3. 如果修改了代码，提交到 Git
+
+### 修改前端配置
+1. 编辑 `frontend/src/config/api.js`
+2. 重新构建前端
+3. 推送到 GitHub 触发 Vercel 重新部署
+
 ### 修复 Bug
 1. 使用 Read 工具阅读相关代码
 2. 使用 Grep 搜索相关关键词
@@ -253,20 +396,10 @@ await fetch(`${COMFYUI_API}/upload/image`, { ... });
 ### 调试技巧
 - 检查浏览器控制台的错误信息
 - 查看 ComfyUI 终端日志
+- 检查后端日志（PM2: `pm2 logs`）
 - 检查 localStorage 中的数据
 - 验证 ComfyUI 连接状态
-
-## API 端点
-
-### ComfyUI REST API
-- `GET /system_stats` - 系统状态（用于连接检查）
-- `GET /object_info/LoraLoader` - 获取可用 LoRA 列表
-- `POST /prompt` - 提交生成任务
-- `POST /upload/image` - 上传图片
-- `GET /view?filename={name}&subfolder=&type=output` - 获取生成的图片
-
-### ComfyUI WebSocket
-- `ws://127.0.0.1:8188/ws?clientId={id}` - 实时进度推送
+- 使用 Network 面板检查请求
 
 ## 已知问题和解决方案
 
@@ -275,19 +408,25 @@ await fetch(`${COMFYUI_API}/upload/image`, { ... });
 **原因**: `fetchAvailableLoras` 只在组件挂载时执行一次
 **解决**: 在 `checkConnection` 成功后调用 `fetchAvailableLoras()`
 
-### 2. 队列竞态条件
+### 2. 队列竞态条件 (已修复)
 **解决**: 使用 `useRef` 管理队列状态，避免闭包陷阱
 
-### 3. 高清化内存溢出
+### 3. 高清化内存溢出 (已修复)
 **解决**: 串行处理，一次只高清化一张图片
 
 ### 4. 拖拽和长按冲突 (已修复)
 **症状**: 拖拽图片时会误触发长按进入多选模式
 **解决**: 在 `onDragStart` 中调用 `handleLongPressEnd()` 取消长按计时器
 
-### 5. 拖拽自动滚动
-**功能**: 拖拽图片到页面边缘时自动滚动页面
-**实现**: 全局监听 `dragover` 事件，检测鼠标位置触发滚动
+### 5. CORS 跨域问题 (已修复)
+**症状**: Vercel 前端无法访问后端
+**原因**: `ALLOWED_ORIGINS` 配置中域名末尾多了斜杠
+**解决**: 移除斜杠，确保格式为 `https://corine-gen.vercel.app`
+
+### 6. 花生壳端口配置错误 (已修复)
+**症状**: 访问花生壳域名时返回 Vite 错误
+**原因**: 花生壳映射到前端端口 5173 而非后端端口 3001
+**解决**: 修改花生壳配置，内网端口改为 3001
 
 ## 性能优化建议
 
@@ -314,31 +453,35 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 - `perf`: 性能优化
 
 ### 最近提交历史
-- `51892dd` 修复重新连接后LoRA列表不刷新问题并添加AI助手开发指南
-- `568ed39` 添加长按进入多选模式和批量命名下载功能
-- `40c0356` 将Emoji图标替换为Lucide React专业图标库
-- `8a3e7eb` 调整亮色模式下标题颜色为深灰色
-- `ea42ff4` 添加设置预设功能
+- `a87f1fb` refactor: 禁用前端 API Key 认证
+- `8290f42` refactor: 移除 API Key 认证以简化访问
+- `2985eb7` fix: 修复 CORS 错误并支持外部访问
+- `8df9df7` refactor: 重构为前后端分离架构并修复 WebSocket 和 ControlNet 问题
 
 ## 快速命令
 
 ```bash
-# 安装依赖
+# 前端
+cd frontend
 npm install
+npm run dev          # 开发服务器
+npm run build        # 构建生产版本
+npm run preview      # 预览生产构建
 
-# 启动开发服务器
-npm run dev
-
-# 构建生产版本
-npm run build
-
-# 预览生产构建
-npm run preview
+# 后端
+cd backend
+npm install
+npm run dev          # 开发模式（nodemon）
+npm start            # 生产模式
+pm2 start src/index.js --name corinegen-backend  # PM2 启动
+pm2 logs             # 查看日志
+pm2 restart all      # 重启服务
 
 # Git 操作
 git status
 git add .
 git commit -m "commit message"
+git push
 git log --oneline -5
 ```
 
@@ -346,7 +489,9 @@ git log --oneline -5
 
 - **README.md**: 用户使用指南
 - **DEVELOPMENT.md**: 详细开发文档
-- **package.json**: 项目依赖和脚本
+- **docs/deployment.md**: 部署指南
+- **frontend/package.json**: 前端依赖和脚本
+- **backend/package.json**: 后端依赖和脚本
 
 ## AI 助手工作流程
 
@@ -368,8 +513,20 @@ git log --oneline -5
 4. **使用专用工具**: 不要用 bash 命令操作文件
 5. **中文优先**: 用户界面和注释使用中文
 6. **测试连接**: 修改 API 调用时注意 ComfyUI 连接状态
+7. **文档同步**: 重大变更后更新相关文档
+
+## 环境信息
+
+- **工作目录**: `C:\Users\Tintt\Documents\CorineGen`
+- **Git 仓库**: 是
+- **平台**: Windows (win32)
+- **前端端口**: 5173 (开发), Vercel (生产)
+- **后端端口**: 3001
+- **ComfyUI**: 127.0.0.1:8188
+- **花生壳域名**: https://6802gd0yf444.vicp.fun
 
 ---
 
-最后更新: 2026-01-12
-维护者: Claude Code Assistant
+**最后更新**: 2026-01-17
+**维护者**: Claude Code Assistant
+**当前架构**: 前后端分离 + 无认证
