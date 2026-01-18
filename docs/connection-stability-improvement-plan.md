@@ -361,6 +361,13 @@ const APP_VERSION = '1.1.0';
 
 ### P0 实施步骤
 
+> **重要提醒**: 每次完成改动后，务必提交代码并推送到远程仓库！
+> ```bash
+> git add .
+> git commit -m "描述改动内容"
+> git push
+> ```
+
 #### 步骤 1: 添加版本号显示
 
 **文件**: `frontend/src/App.jsx`
