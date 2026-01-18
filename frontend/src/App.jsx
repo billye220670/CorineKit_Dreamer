@@ -15,7 +15,7 @@ import { WsClient } from './services/wsClient.js';
 import { API_CONFIG, getApiKey, setApiKey, isAuthRequired } from './config/api.js';
 
 // 应用版本号
-const APP_VERSION = '1.1.0';
+const APP_VERSION = '1.1.1';  // 修复布局和断开恢复
 
 // 图生图/ControlNet 降噪强度默认值
 const DEFAULT_IMG2IMG_DENOISE = 1;
