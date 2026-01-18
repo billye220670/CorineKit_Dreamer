@@ -628,6 +628,12 @@ const App = () => {
           setTimeout(() => setShowNotification(false), 3000);
           fetchAvailableLoras(); // 连接成功后刷新LoRA列表
         }
+
+        // 如果是从断开恢复的，重新加载失败的图片
+        if (wasDisconnected) {
+          reloadFailedImages();
+        }
+
         startHeartbeat();
       } else if (result.authRequired) {
         // 需要认证
@@ -992,7 +998,9 @@ const App = () => {
         aspectRatio: currentAspectRatio, // 保存当前图像比例（用于显示）
         savedParams: savedParams, // 保存生成参数（用于生成）
         displayQuality: 'hq', // 当前显示的清晰度：'sq' 标清 或 'hq' 高清
-        showQualityMenu: false // 是否显示清晰度切换菜单
+        showQualityMenu: false, // 是否显示清晰度切换菜单
+        imageLoadError: false, // 图片加载是否失败
+        imageRetryCount: 0 // 图片加载重试次数
       }));
 
       console.log('[generateForPrompt] 创建占位符:', placeholders.map(p => ({ id: p.id, status: p.status, imageUrl: p.imageUrl })));
@@ -1183,7 +1191,9 @@ const App = () => {
       aspectRatio: currentAspectRatio, // 保存当前图像比例（用于显示）
       savedParams: savedParams, // 保存生成参数（用于生成）
       displayQuality: 'hq', // 当前显示的清晰度：'sq' 标清 或 'hq' 高清
-      showQualityMenu: false // 是否显示清晰度切换菜单
+      showQualityMenu: false, // 是否显示清晰度切换菜单
+      imageLoadError: false, // 图片加载是否失败
+      imageRetryCount: 0 // 图片加载重试次数
     }));
 
     // 先更新ref（同步），再更新state（异步）
@@ -1271,6 +1281,7 @@ const App = () => {
               setShowNotification(true);
               setTimeout(() => setShowNotification(false), 3000);
               startHeartbeat();
+              reloadFailedImages();
             }
 
             updateImagePlaceholders(prev => prev.map(p =>
@@ -1290,6 +1301,7 @@ const App = () => {
               setShowNotification(true);
               setTimeout(() => setShowNotification(false), 3000);
               startHeartbeat();
+              reloadFailedImages();
             }
 
             const { value, max } = data;
@@ -1542,6 +1554,7 @@ const App = () => {
                   setShowNotification(true);
                   setTimeout(() => setShowNotification(false), 3000);
                   startHeartbeat();
+                  reloadFailedImages();
                 }
 
                 const { value, max } = data;
@@ -1822,6 +1835,7 @@ const App = () => {
                     setShowNotification(true);
                     setTimeout(() => setShowNotification(false), 3000);
                     startHeartbeat();
+                    reloadFailedImages();
                   }
 
                   const progressPercent = Math.floor((value / max) * 100);
@@ -2362,6 +2376,98 @@ const App = () => {
         ? { ...p, displayQuality: quality, showQualityMenu: false }
         : p
     ));
+  };
+
+  // 处理图片加载错误
+  const handleImageError = (placeholderId) => {
+    const placeholder = imagePlaceholdersRef.current.find(p => p.id === placeholderId);
+    if (!placeholder) return;
+
+    const maxRetries = 3;
+
+    // 如果重试次数未超过最大值，标记错误并准备重试
+    if (placeholder.imageRetryCount < maxRetries) {
+      console.warn(`[handleImageError] 图片加载失败，准备重试 (${placeholder.imageRetryCount + 1}/${maxRetries}):`, placeholderId);
+
+      updateImagePlaceholders(prev => prev.map(p =>
+        p.id === placeholderId ? {
+          ...p,
+          imageLoadError: true,
+          imageRetryCount: p.imageRetryCount + 1
+        } : p
+      ));
+
+      // 延迟后重试加载
+      setTimeout(() => {
+        retryImageLoad(placeholderId);
+      }, 1000 * placeholder.imageRetryCount); // 递增延迟：1秒, 2秒, 3秒
+    } else {
+      console.error(`[handleImageError] 图片加载失败，已达最大重试次数:`, placeholderId);
+      updateImagePlaceholders(prev => prev.map(p =>
+        p.id === placeholderId ? {
+          ...p,
+          imageLoadError: true
+        } : p
+      ));
+    }
+  };
+
+  // 重试加载图片
+  const retryImageLoad = (placeholderId) => {
+    console.log(`[retryImageLoad] 重试加载图片:`, placeholderId);
+
+    // 通过更新 imageUrl 触发重新加载（添加时间戳防止缓存）
+    updateImagePlaceholders(prev => prev.map(p => {
+      if (p.id !== placeholderId) return p;
+
+      const baseUrl = p.imageUrl?.split('?')[0] || p.imageUrl;
+      const newUrl = baseUrl ? `${baseUrl}?t=${Date.now()}` : null;
+
+      return {
+        ...p,
+        imageUrl: newUrl,
+        imageLoadError: false
+      };
+    }));
+  };
+
+  // 处理图片加载成功
+  const handleImageLoad = (placeholderId) => {
+    // 清除错误状态和重试计数
+    updateImagePlaceholders(prev => prev.map(p =>
+      p.id === placeholderId ? {
+        ...p,
+        imageLoadError: false,
+        imageRetryCount: 0
+      } : p
+    ));
+  };
+
+  // 重新加载所有失败的图片（连接恢复时调用）
+  const reloadFailedImages = () => {
+    const failedPlaceholders = imagePlaceholdersRef.current.filter(
+      p => p.imageLoadError && p.imageUrl && p.status === 'completed'
+    );
+
+    if (failedPlaceholders.length > 0) {
+      console.log(`[reloadFailedImages] 重新加载 ${failedPlaceholders.length} 张失败的图片`);
+
+      failedPlaceholders.forEach(p => {
+        // 重置重试计数，给一次新的机会
+        updateImagePlaceholders(prev => prev.map(placeholder =>
+          placeholder.id === p.id ? {
+            ...placeholder,
+            imageRetryCount: 0,
+            imageLoadError: false
+          } : placeholder
+        ));
+
+        // 延迟一下再重试，避免同时请求太多
+        setTimeout(() => {
+          retryImageLoad(p.id);
+        }, Math.random() * 500); // 随机延迟0-500ms
+      });
+    }
   };
 
   // 删除单张图片（仅前端UI）
@@ -3586,6 +3692,8 @@ const App = () => {
                               : placeholder.imageUrl
                           }
                           alt={`Generated ${placeholder.id}`}
+                          onError={() => handleImageError(placeholder.id)}
+                          onLoad={() => handleImageLoad(placeholder.id)}
                           onClick={() => {
                             // 如果刚触发了长按，跳过点击事件
                             if (longPressTriggeredRef.current) {
