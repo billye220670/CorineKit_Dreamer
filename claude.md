@@ -193,6 +193,31 @@ const checkConnection = async (silent = false) => { ... }
 - 使用图片深度 → `ZIT_CNN_API.json` (index=1)
 - 使用图片姿势 → `ZIT_CNN_API.json` (index=2)
 
+### 10. 图片加载恢复机制 (App.jsx:2372-2461, 3695-3696)
+**问题**: 图片在渐进式加载过程中如果网络断开，只加载一半后无法恢复
+
+**解决方案**:
+- **自动重试**: 监听 `<img>` 的 `onError` 事件，最多重试 3 次（递增延迟 1s/2s/3s）
+- **连接恢复**: 重连时自动扫描并重新加载所有失败的图片
+- **防止缓存**: 重试时添加时间戳参数 `?t=timestamp`
+
+**新增字段**:
+```javascript
+imageLoadError: false,   // 图片是否加载失败
+imageRetryCount: 0       // 重试次数
+```
+
+**核心函数**:
+- `handleImageError(placeholderId)`: 处理图片加载失败
+- `retryImageLoad(placeholderId)`: 重试加载图片
+- `handleImageLoad(placeholderId)`: 处理加载成功
+- `reloadFailedImages()`: 批量重新加载失败图片
+
+**触发时机**:
+1. 图片加载失败 → 自动重试（最多 3 次）
+2. 手动重连成功 → 重新加载所有失败图片
+3. 生成时连接恢复 → 重新加载所有失败图片
+
 ## API 配置与认证
 
 ### 环境判断
@@ -247,6 +272,11 @@ ALLOWED_ORIGINS=http://localhost:5173,https://corine-gen.vercel.app
 | 图生图工作流构建 | App.jsx | 1477-1508 |
 | ControlNet工作流构建 | App.jsx | 1510-1539 |
 | 参考图片上传处理 | App.jsx | 625-670 |
+| 图片加载错误处理 | App.jsx | 2372-2403 |
+| 图片加载重试 | App.jsx | 2405-2422 |
+| 图片加载成功处理 | App.jsx | 2424-2434 |
+| 批量重新加载失败图片 | App.jsx | 2436-2461 |
+| 图片 onError/onLoad 事件 | App.jsx | 3695-3696 |
 | 主题管理 | App.jsx | 139-151, App.css:1-50 |
 | localStorage 持久化 | App.jsx | 50-75 |
 
@@ -428,6 +458,26 @@ npm run dev  # 访问 localhost:5173
 **原因**: 花生壳映射到前端端口 5173 而非后端端口 3001
 **解决**: 修改花生壳配置，内网端口改为 3001
 
+### 7. 连接状态横幅显示错误 (已修复 - 2026-01-17)
+**症状**: 生成过程中心跳检测失败时显示"无法连接到 ComfyUI"红色横幅，但生成任务实际正常进行
+**原因**: 心跳检测（HTTP）和生成连接（WebSocket）是独立的，心跳失败不代表生成连接断开
+**解决**:
+- 生成过程中（`isGenerating === true`）忽略心跳检测失败
+- 收到 ComfyUI 消息时自动恢复连接状态，显示"已重新连接到 ComfyUI"绿色横幅
+- 横幅 3 秒后自动收起
+**修复记录**: commit `0e4078e`
+
+### 8. 图片加载中断无法恢复 (已修复 - 2026-01-18)
+**症状**: 图片在渐进式加载过程中如果网络断开，只加载一半后无法恢复，即使重连也永久显示半张图片
+**原因**: 浏览器的 `<img>` 加载失败后不会自动重试，也没有监听 `onError` 事件
+**解决**:
+- 监听 `<img>` 的 `onError` 事件，检测加载失败
+- 自动重试最多 3 次，递增延迟（1s/2s/3s）
+- 重试时添加时间戳参数防止浏览器缓存
+- 连接恢复时自动扫描并批量重新加载所有失败图片
+- 监听 `onLoad` 事件，加载成功后清除错误状态
+**修复记录**: commit `3b80d0b`
+
 ## 性能优化建议
 
 1. 图片数量控制在 20 张以内
@@ -453,10 +503,11 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 - `perf`: 性能优化
 
 ### 最近提交历史
+- `3b80d0b` feat: 添加图片加载失败自动恢复机制
+- `0e4078e` fix: 修复连接状态横幅显示错误
+- `e9b63c3` 更新claude文档
+- `d17d7a4` docs: 更新所有文档反映当前架构
 - `a87f1fb` refactor: 禁用前端 API Key 认证
-- `8290f42` refactor: 移除 API Key 认证以简化访问
-- `2985eb7` fix: 修复 CORS 错误并支持外部访问
-- `8df9df7` refactor: 重构为前后端分离架构并修复 WebSocket 和 ControlNet 问题
 
 ## 快速命令
 
@@ -527,6 +578,6 @@ git log --oneline -5
 
 ---
 
-**最后更新**: 2026-01-17
+**最后更新**: 2026-01-18
 **维护者**: Claude Code Assistant
 **当前架构**: 前后端分离 + 无认证
