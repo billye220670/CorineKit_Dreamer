@@ -15,7 +15,7 @@ import { WsClient } from './services/wsClient.js';
 import { API_CONFIG, getApiKey, setApiKey, isAuthRequired } from './config/api.js';
 
 // 应用版本号
-const APP_VERSION = '1.1.3';  // 修复继续生成卡queue
+const APP_VERSION = '1.1.4';  // 修复后端未完全启动时继续生成卡queue
 
 // 图生图/ControlNet 降噪强度默认值
 const DEFAULT_IMG2IMG_DENOISE = 1;
@@ -178,6 +178,7 @@ const App = () => {
   const firstSeedRef = useRef(null);
   const heartbeatRef = useRef(null); // 心跳检测定时器
   const heartbeatFailCountRef = useRef(0); // 心跳失败计数
+  const recoveryStateRef = useRef(recoveryState); // 同步跟踪恢复状态
   const longPressTimerRef = useRef(null); // 长按计时器
   const longPressTriggeredRef = useRef(false); // 长按是否已触发
   const imageInputRefs = useRef({}); // 图片上传input的refs
@@ -335,6 +336,11 @@ const App = () => {
   useEffect(() => {
     localStorage.setItem('corineGen_activePresetId', JSON.stringify(activePresetId));
   }, [activePresetId]);
+
+  // 同步 recoveryState 到 ref（用于异步操作中获取最新值）
+  useEffect(() => {
+    recoveryStateRef.current = recoveryState;
+  }, [recoveryState]);
 
   // 获取当前所有预设参数的快照
   const getCurrentSettingsSnapshot = () => ({
@@ -1137,21 +1143,19 @@ const App = () => {
 
     const { promptId, pausedBatchId, savedParams } = recoveryState;
 
-    // 清除恢复状态
-    setRecoveryState({
-      isPaused: false,
-      pausedBatchId: null,
-      promptId: null,
-      pausedIndex: 0,
-      totalCount: 0,
-      savedParams: null,
-      reason: ''
-    });
+    // 不立即清除恢复状态，等 WebSocket 连接成功后再清除
+    // 如果连接失败，恢复状态会保持，用户可以重试
 
     // 找到对应的提示词
     const prompt = prompts.find(p => p.id === promptId);
     if (!prompt) {
       console.error('未找到对应的提示词');
+      // 恢复到暂停状态
+      updateImagePlaceholders(prev => prev.map(p =>
+        p.batchId === pausedBatchId && p.status === 'queue'
+          ? { ...p, status: 'paused', isLoading: false, progress: 0 }
+          : p
+      ));
       return;
     }
 
@@ -1578,6 +1582,22 @@ const App = () => {
 
         await new Promise((resolve, reject) => {
           ws.onopen = () => {
+            console.log('WebSocket 连接成功');
+
+            // WebSocket 连接成功，清除恢复状态（如果是恢复操作）
+            if (batchId && recoveryStateRef.current.pausedBatchId === batchId) {
+              console.log('恢复操作成功，清除恢复状态');
+              setRecoveryState({
+                isPaused: false,
+                pausedBatchId: null,
+                promptId: null,
+                pausedIndex: 0,
+                totalCount: 0,
+                savedParams: null,
+                reason: ''
+              });
+            }
+
             resolve();
           };
 
@@ -1865,6 +1885,22 @@ const App = () => {
 
         await new Promise((resolve, reject) => {
           ws.onopen = () => {
+            console.log('WebSocket 连接成功');
+
+            // WebSocket 连接成功，清除恢复状态（如果是恢复操作）
+            if (batchId && recoveryStateRef.current.pausedBatchId === batchId) {
+              console.log('恢复操作成功，清除恢复状态');
+              setRecoveryState({
+                isPaused: false,
+                pausedBatchId: null,
+                promptId: null,
+                pausedIndex: 0,
+                totalCount: 0,
+                savedParams: null,
+                reason: ''
+              });
+            }
+
             resolve();
           };
 
