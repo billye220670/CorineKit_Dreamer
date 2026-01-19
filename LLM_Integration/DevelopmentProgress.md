@@ -497,6 +497,7 @@ script 模式: [✅ 成功] - 12.9s，生成 4 个分镜，人物一致，故事
 - [✅] 错误处理已实现
 - [✅] 修复 API 配置导入错误（使用 API_CONFIG.baseUrl）
 - [✅] 修复 connected 变量未定义错误（使用 connectionStatus）
+- [✅] 修复按钮禁用逻辑（提示词助理不依赖 ComfyUI 连接）
 
 **测试步骤**:
 1. 启动后端: `cd backend && npm run dev`
