@@ -3388,30 +3388,34 @@ body {
 /* 生成按钮 */
 .prompt-assistant-generate-button {
   width: 100%;
-  padding: 14px 24px;
-  background: var(--theme-primary);
+  padding: 14px;
+  background: linear-gradient(135deg, var(--theme-primary) 0%, var(--theme-primary-dark) 100%);
   border: none;
   border-radius: 8px;
   color: white;
-  font-size: 16px;
-  font-weight: 600;
+  font-size: 1rem;
+  font-weight: 700;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 20px var(--theme-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
 }
 
 .prompt-assistant-generate-button:hover:not(:disabled) {
-  background: hsla(var(--theme-hue), var(--theme-saturation), calc(var(--theme-lightness) + 5%), 1);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px hsla(var(--theme-hue), var(--theme-saturation), var(--theme-lightness), 0.3);
-}
-
-.prompt-assistant-generate-button:active:not(:disabled) {
-  transform: translateY(0);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 30px var(--theme-border);
 }
 
 .prompt-assistant-generate-button:disabled {
-  opacity: 0.5;
+  opacity: 0.6;
   cursor: not-allowed;
+}
+
+.light-mode .prompt-assistant-generate-button {
+  color: hsl(0, 0%, 20%);
 }
 
 /* 错误提示 */
@@ -3590,25 +3594,33 @@ body {
 /* 应用按钮 */
 .prompt-assistant-apply-button {
   width: 100%;
-  padding: 14px 24px;
-  background: hsla(var(--theme-hue), var(--theme-saturation), var(--theme-lightness), 0.9);
+  padding: 14px;
+  background: linear-gradient(135deg, var(--theme-primary) 0%, var(--theme-primary-dark) 100%);
   border: none;
   border-radius: 8px;
   color: white;
-  font-size: 16px;
-  font-weight: 600;
+  font-size: 1rem;
+  font-weight: 700;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 20px var(--theme-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
 }
 
 .prompt-assistant-apply-button:hover {
-  background: var(--theme-primary);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px hsla(var(--theme-hue), var(--theme-saturation), var(--theme-lightness), 0.3);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 30px var(--theme-border);
 }
 
 .prompt-assistant-apply-button:active {
   transform: translateY(0);
+}
+
+.light-mode .prompt-assistant-apply-button {
+  color: hsl(0, 0%, 20%);
 }
 
 /* 响应式设计 */
