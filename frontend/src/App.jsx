@@ -45,6 +45,14 @@ const PRESET_MODES = [
   }
 ];
 
+// 提示词助理输入框占位符
+const PROMPT_ASSISTANT_PLACEHOLDERS = {
+  variation: '输入提示词，使用 # 标记需要变化的部分，@ 后跟 0-1 的权重，() 内写特殊偏好\n例如: a girl, #wearing red dress@0.8(prefer blue tones)',
+  polish: '输入提示词，使用 [] 或 【】 标记需要扩写的部分，... 的数量表示扩写程度\n例如: a girl, [wearing dress......], standing in the garden',
+  continue: '输入当前分镜的提示词，AI 将为你设计下一个分镜场景',
+  script: '输入故事大纲或情节描述，AI 将生成完整的分镜提示词\n可选：指定需要的分镜数量'
+};
+
 // 兼容层：基于 API_CONFIG 生成 API 地址
 // 用于渐进式迁移，避免一次性修改所有代码
 const COMFYUI_API = API_CONFIG.baseUrl + '/api';
@@ -4220,8 +4228,35 @@ const App = () => {
 
             {/* Modal 内容 */}
             <div className="prompt-assistant-content">
-              <p>内容区域开发中...</p>
-              <p>当前模式: {assistantMode}</p>
+              {/* 输入框区域 */}
+              <div className="prompt-assistant-input-section">
+                <textarea
+                  className="prompt-assistant-textarea"
+                  value={assistantInput}
+                  onChange={(e) => setAssistantInput(e.target.value)}
+                  placeholder={PROMPT_ASSISTANT_PLACEHOLDERS[assistantMode]}
+                  rows={6}
+                />
+                <div className="prompt-assistant-char-count">
+                  {assistantInput.length} 字符
+                </div>
+              </div>
+
+              {/* 生成按钮 */}
+              <button
+                className="prompt-assistant-generate-button"
+                onClick={() => alert('生成功能开发中')}
+                disabled={!assistantInput.trim() || isGeneratingPrompt}
+              >
+                {isGeneratingPrompt ? '生成中...' : '生成'}
+              </button>
+
+              {/* 结果预览区域 - 临时占位 */}
+              <div className="prompt-assistant-results">
+                <p style={{ color: 'rgba(255,255,255,0.4)', textAlign: 'center', marginTop: '32px' }}>
+                  点击"生成"按钮获取 AI 优化建议
+                </p>
+              </div>
             </div>
           </div>
         </div>

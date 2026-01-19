@@ -3227,6 +3227,103 @@ body {
   flex: 1;
   padding: 24px;
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* 输入框区域 */
+.prompt-assistant-input-section {
+  position: relative;
+}
+
+.prompt-assistant-textarea {
+  width: 100%;
+  min-height: 140px;
+  padding: 16px;
+  background: hsla(var(--theme-hue), 15%, 18%, 0.8);
+  border: 1px solid hsla(var(--theme-hue), 15%, 30%, 0.5);
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 15px;
+  line-height: 1.6;
+  resize: vertical;
+  font-family: inherit;
+  transition: all 0.2s ease;
+}
+
+.prompt-assistant-textarea:focus {
+  outline: none;
+  border-color: var(--theme-primary);
+  background: hsla(var(--theme-hue), 15%, 20%, 0.9);
+}
+
+.prompt-assistant-textarea::placeholder {
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.light-mode .prompt-assistant-textarea {
+  background: hsla(var(--theme-hue), 15%, 98%, 1);
+  border-color: hsla(var(--theme-hue), 15%, 80%, 0.8);
+  color: rgba(30, 30, 30, 0.9);
+}
+
+.light-mode .prompt-assistant-textarea:focus {
+  border-color: var(--theme-primary);
+  background: white;
+}
+
+.light-mode .prompt-assistant-textarea::placeholder {
+  color: rgba(60, 60, 60, 0.4);
+}
+
+/* 字符计数 */
+.prompt-assistant-char-count {
+  position: absolute;
+  bottom: 8px;
+  right: 12px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.4);
+  pointer-events: none;
+}
+
+.light-mode .prompt-assistant-char-count {
+  color: rgba(60, 60, 60, 0.5);
+}
+
+/* 生成按钮 */
+.prompt-assistant-generate-button {
+  width: 100%;
+  padding: 14px 24px;
+  background: var(--theme-primary);
+  border: none;
+  border-radius: 8px;
+  color: white;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.prompt-assistant-generate-button:hover:not(:disabled) {
+  background: hsla(var(--theme-hue), var(--theme-saturation), calc(var(--theme-lightness) + 5%), 1);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px hsla(var(--theme-hue), var(--theme-saturation), var(--theme-lightness), 0.3);
+}
+
+.prompt-assistant-generate-button:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.prompt-assistant-generate-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* 结果预览区域 */
+.prompt-assistant-results {
+  flex: 1;
+  min-height: 100px;
 }
 
 /* 响应式设计 */
