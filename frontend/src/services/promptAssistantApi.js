@@ -7,13 +7,14 @@
 import { API_CONFIG } from '../config/api.js';
 
 /**
- * 生成提示词
+ * 生成提示词（带自动重试）
  *
  * @param {string} mode - 模式: 'variation' | 'polish' | 'continue' | 'script'
  * @param {string} input - 用户输入的提示词
+ * @param {number} retries - 重试次数（内部参数）
  * @returns {Promise<{success: boolean, mode: string, data: string[]}>}
  */
-export async function generatePrompt(mode, input) {
+export async function generatePrompt(mode, input, retries = 2) {
   try {
     console.log(`[Prompt Assistant API] 调用 ${mode} 模式，输入长度: ${input.length}`);
 
@@ -37,6 +38,21 @@ export async function generatePrompt(mode, input) {
   } catch (error) {
     console.error('[Prompt Assistant API] 请求失败:', error.message);
 
+    // 如果是连接重置或超时错误，且还有重试次数，则自动重试
+    const isRetriableError =
+      error.message.includes('Failed to fetch') ||
+      error.message.includes('NetworkError') ||
+      error.message.includes('500') ||
+      error.message.includes('ECONNRESET') ||
+      error.message.includes('连接被重置') ||
+      error.message.includes('timeout');
+
+    if (isRetriableError && retries > 0) {
+      console.log(`[Prompt Assistant API] 自动重试，剩余重试次数: ${retries}`);
+      await new Promise(resolve => setTimeout(resolve, 1000)); // 等待1秒后重试
+      return generatePrompt(mode, input, retries - 1);
+    }
+
     // 将错误转换为用户友好的消息
     let userMessage = error.message;
 
@@ -46,8 +62,10 @@ export async function generatePrompt(mode, input) {
       userMessage = 'API 调用过于频繁，请稍后再试（每分钟限制 10 次）';
     } else if (error.message.includes('401')) {
       userMessage = 'API 认证失败，请检查服务器配置';
-    } else if (error.message.includes('timeout')) {
-      userMessage = '请求超时，请稍后重试';
+    } else if (error.message.includes('timeout') || error.message.includes('ECONNRESET') || error.message.includes('连接被重置')) {
+      userMessage = '请求超时或连接中断，请稍后重试';
+    } else if (error.message.includes('500')) {
+      userMessage = '服务器内部错误，请稍后重试';
     }
 
     throw new Error(userMessage);

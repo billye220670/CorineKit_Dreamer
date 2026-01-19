@@ -12,6 +12,8 @@ class GrokClient {
     this.client = new OpenAI({
       baseURL: GROK_CONFIG.baseURL,
       apiKey: GROK_CONFIG.apiKey,
+      timeout: 60000, // 60秒超时
+      maxRetries: 2,  // 自动重试2次
     });
     this.model = GROK_CONFIG.model;
   }
@@ -70,6 +72,10 @@ class GrokClient {
         throw new Error('无法连接到 Grok API，请检查网络连接');
       } else if (error.code === 'ETIMEDOUT') {
         throw new Error('API 请求超时，请稍后重试');
+      } else if (error.code === 'ECONNRESET') {
+        throw new Error('连接被重置，请稍后重试');
+      } else if (error.message && error.message.includes('timeout')) {
+        throw new Error('请求超时，请稍后重试');
       }
 
       throw new Error(`Grok API 调用失败: ${error.message}`);
