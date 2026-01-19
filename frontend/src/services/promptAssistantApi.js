@@ -4,7 +4,7 @@
  * 提供与后端 LLM 服务通信的方法
  */
 
-import { COMFYUI_API } from '../config/api.js';
+import { API_CONFIG } from '../config/api.js';
 
 /**
  * 生成提示词
@@ -17,7 +17,7 @@ export async function generatePrompt(mode, input) {
   try {
     console.log(`[Prompt Assistant API] 调用 ${mode} 模式，输入长度: ${input.length}`);
 
-    const response = await fetch(`${COMFYUI_API}/prompt-assistant/generate`, {
+    const response = await fetch(`${API_CONFIG.baseUrl}/api/prompt-assistant/generate`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -61,7 +61,7 @@ export async function generatePrompt(mode, input) {
  */
 export async function checkHealth() {
   try {
-    const response = await fetch(`${COMFYUI_API}/prompt-assistant/health`);
+    const response = await fetch(`${API_CONFIG.baseUrl}/api/prompt-assistant/health`);
     return await response.json();
   } catch (error) {
     console.error('[Prompt Assistant API] 健康检查失败:', error);
