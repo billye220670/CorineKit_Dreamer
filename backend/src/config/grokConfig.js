@@ -4,6 +4,9 @@
  * 从环境变量读取配置并验证必需参数
  */
 
+import dotenv from 'dotenv';
+dotenv.config();
+
 export const GROK_CONFIG = {
   baseURL: process.env.GROK_API_BASE_URL || 'https://api.jiekou.ai/openai',
   apiKey: process.env.GROK_API_KEY,

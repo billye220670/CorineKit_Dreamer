@@ -1,13 +1,15 @@
+// 首先加载环境变量（必须在所有导入之前）
+import dotenv from 'dotenv';
+dotenv.config();
+
 import express from 'express';
 import http from 'http';
 import { WebSocketServer } from 'ws';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import { createProxyMiddleware } from 'http-proxy-middleware';
 import { setupWSProxy } from './proxy/wsProxy.js';
-
-// 加载环境变量
-dotenv.config();
+import promptController from './controllers/promptController.js';
+import { grokRateLimiter } from './middleware/rateLimiter.js';
 
 const app = express();
 const server = http.createServer(app);
@@ -76,9 +78,6 @@ app.use('/api/upload', uploadProxy);
 app.use(express.json({ limit: '50mb' }));
 
 // 提示词助理 API（在代理之前注册，避免被代理拦截）
-import promptController from './controllers/promptController.js';
-import { grokRateLimiter } from './middleware/rateLimiter.js';
-
 app.post(
   '/api/prompt-assistant/generate',
   grokRateLimiter,
