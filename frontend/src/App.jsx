@@ -189,7 +189,13 @@ const App = () => {
   const [promptAssistantOpen, setPromptAssistantOpen] = useState(false); // Modal 显示状态
   const [assistantMode, setAssistantMode] = useState(() => loadFromStorage('corineGen_assistantMode', 'variation'));
   const [assistantInput, setAssistantInput] = useState(() => loadFromStorage('corineGen_assistantInput', ''));
-  const [assistantResults, setAssistantResults] = useState(() => loadFromStorage('corineGen_assistantResults', []));
+  // 每个模式独立存储结果
+  const [assistantResults, setAssistantResults] = useState(() => loadFromStorage('corineGen_assistantResults', {
+    variation: [],
+    polish: [],
+    continue: [],
+    script: []
+  }));
   const [selectedResultIndex, setSelectedResultIndex] = useState(() => loadFromStorage('corineGen_selectedResultIndex', 0));
   const [isGeneratingPrompt, setIsGeneratingPrompt] = useState(false); // 生成中
   const [assistantError, setAssistantError] = useState(null); // 错误信息
@@ -2808,7 +2814,6 @@ const App = () => {
 
     setIsGeneratingPrompt(true);
     setAssistantError(null);
-    setAssistantResults([]);
 
     try {
       console.log(`[Prompt Assistant] 开始生成，模式: ${assistantMode}`);
@@ -2816,7 +2821,11 @@ const App = () => {
       const response = await generatePrompt(assistantMode, assistantInput.trim());
 
       if (response.success && response.data) {
-        setAssistantResults(response.data);
+        // 更新对应模式的结果
+        setAssistantResults(prev => ({
+          ...prev,
+          [assistantMode]: response.data
+        }));
         setSelectedResultIndex(0); // 默认选中第一个
         console.log(`[Prompt Assistant] 生成成功，返回 ${response.data.length} 个结果`);
       } else {
@@ -2874,11 +2883,12 @@ const App = () => {
 
   // 下载分镜脚本
   const downloadScript = () => {
-    if (assistantResults.length === 0) return;
+    const scriptResults = assistantResults.script || [];
+    if (scriptResults.length === 0) return;
 
     // 生成txt内容
     let content = '# 分镜脚本\n\n';
-    assistantResults.forEach((prompt, index) => {
+    scriptResults.forEach((prompt, index) => {
       content += `## 分镜 ${index + 1}\n${prompt}\n\n`;
     });
 
@@ -2893,7 +2903,7 @@ const App = () => {
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
 
-    console.log(`[Prompt Assistant] 下载分镜脚本，共 ${assistantResults.length} 个分镜`);
+    console.log(`[Prompt Assistant] 下载分镜脚本，共 ${scriptResults.length} 个分镜`);
   };
 
   return (
@@ -4408,7 +4418,7 @@ const App = () => {
                 <div className="prompt-assistant-results-container">
                   <div className="prompt-assistant-results">
                     {/* 空状态 - 没有结果 */}
-                    {!isGeneratingPrompt && assistantResults.length === 0 && !assistantError && (
+                    {!isGeneratingPrompt && (!assistantResults[assistantMode] || assistantResults[assistantMode].length === 0) && !assistantError && (
                       <div className="prompt-assistant-empty-state">
                         <p className="empty-state-text">点击"生成"按钮获取 AI 优化建议</p>
                       </div>
@@ -4423,12 +4433,12 @@ const App = () => {
                     )}
 
                     {/* variation 模式：多个变体，每个有+按钮 */}
-                    {!isGeneratingPrompt && assistantResults.length > 0 && assistantMode === 'variation' && (
+                    {!isGeneratingPrompt && assistantResults[assistantMode]?.length > 0 && assistantMode === 'variation' && (
                       <div className="prompt-assistant-results-list">
                         <p className="results-header">
-                          生成了 {assistantResults.length} 个变体，点击"+"添加到提示词列表：
+                          生成了 {assistantResults[assistantMode].length} 个变体，点击"+"添加到提示词列表：
                         </p>
-                        {assistantResults.map((result, index) => (
+                        {assistantResults[assistantMode].map((result, index) => (
                           <div key={index} className="result-card-with-action">
                             <div className="result-content">
                               <span className="result-number">#{index + 1}</span>
@@ -4447,18 +4457,18 @@ const App = () => {
                     )}
 
                     {/* polish 和 continue 模式：单个结果，有+按钮 */}
-                    {!isGeneratingPrompt && assistantResults.length > 0 && (assistantMode === 'polish' || assistantMode === 'continue') && (
+                    {!isGeneratingPrompt && assistantResults[assistantMode]?.length > 0 && (assistantMode === 'polish' || assistantMode === 'continue') && (
                       <div className="prompt-assistant-results-list">
                         <p className="results-header">
                           {assistantMode === 'polish' ? '扩写润色结果：' : '后续分镜提示词：'}
                         </p>
                         <div className="result-card-with-action">
                           <div className="result-content">
-                            <p className="result-text">{assistantResults[0]}</p>
+                            <p className="result-text">{assistantResults[assistantMode][0]}</p>
                           </div>
                           <button
                             className="result-add-button"
-                            onClick={() => addPromptWithText(assistantResults[0])}
+                            onClick={() => addPromptWithText(assistantResults[assistantMode][0])}
                             title="添加到提示词列表"
                           >
                             +
@@ -4468,12 +4478,12 @@ const App = () => {
                     )}
 
                     {/* script 模式：多个分镜，每个有+按钮 */}
-                    {!isGeneratingPrompt && assistantResults.length > 0 && assistantMode === 'script' && (
+                    {!isGeneratingPrompt && assistantResults[assistantMode]?.length > 0 && assistantMode === 'script' && (
                       <div className="prompt-assistant-results-list">
                         <p className="results-header">
-                          生成了 {assistantResults.length} 个分镜，点击"+"添加到提示词列表：
+                          生成了 {assistantResults[assistantMode].length} 个分镜，点击"+"添加到提示词列表：
                         </p>
-                        {assistantResults.map((result, index) => (
+                        {assistantResults[assistantMode].map((result, index) => (
                           <div key={index} className="result-card-with-action">
                             <div className="result-content">
                               <span className="result-number">分镜 {index + 1}</span>
@@ -4494,7 +4504,7 @@ const App = () => {
                 </div>
 
                 {/* 底部按钮（固定底部） - 只在有结果时显示 */}
-                {!isGeneratingPrompt && assistantResults.length > 0 && (
+                {!isGeneratingPrompt && assistantResults[assistantMode]?.length > 0 && (
                   <div className="prompt-assistant-apply-section">
                     {assistantMode === 'script' ? (
                       <button

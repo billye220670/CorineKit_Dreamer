@@ -3618,20 +3618,21 @@ body {
   border-color: hsla(var(--theme-hue), 15%, 70%, 1);
 }
 
-/* +按钮样式 */
+/* +按钮样式（参照生成按钮） */
 .result-add-button {
   flex-shrink: 0;
-  width: 32px;
-  height: 32px;
+  width: 40px;
+  height: 40px;
   padding: 0;
-  background: var(--theme-primary);
+  background: linear-gradient(135deg, var(--theme-primary) 0%, var(--theme-primary-dark) 100%);
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   color: white;
-  font-size: 20px;
-  font-weight: 600;
+  font-size: 24px;
+  font-weight: 700;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 20px var(--theme-border);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3639,17 +3640,16 @@ body {
 }
 
 .result-add-button:hover {
-  background: hsla(var(--theme-hue), var(--theme-saturation), calc(var(--theme-lightness) + 10%), 1);
-  transform: scale(1.1);
-  box-shadow: 0 2px 8px hsla(var(--theme-hue), var(--theme-saturation), var(--theme-lightness), 0.4);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 30px var(--theme-border);
 }
 
 .result-add-button:active {
-  transform: scale(0.95);
+  transform: translateY(0);
 }
 
 .light-mode .result-add-button {
-  color: white;
+  color: hsl(0, 0%, 20%);
 }
 
 /* 应用按钮 */
