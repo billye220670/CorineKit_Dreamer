@@ -74,6 +74,22 @@ app.use('/api/upload', uploadProxy);
 
 // 其他 API 路由（需要解析 JSON body）
 app.use(express.json({ limit: '50mb' }));
+
+// 提示词助理 API（在代理之前注册，避免被代理拦截）
+import promptController from './controllers/promptController.js';
+import { grokRateLimiter } from './middleware/rateLimiter.js';
+
+app.post(
+  '/api/prompt-assistant/generate',
+  grokRateLimiter,
+  (req, res) => promptController.generate(req, res)
+);
+
+app.get('/api/prompt-assistant/health', (req, res) => {
+  res.json({ success: true, service: 'prompt-assistant', timestamp: new Date().toISOString() });
+});
+
+// ComfyUI 代理路由（放在最后，作为兜底）
 app.use('/api', jsonProxy);
 
 // 设置 WebSocket 代理
