@@ -7,7 +7,7 @@
 **名称**: CorineGen - AI 图像生成器
 **架构**: React 前端 + Node.js 后端（前后端分离）
 **用途**: ComfyUI 的 Web 前端界面，用于生成和管理 AI 图像
-**当前版本**: 1.0.0
+**当前版本**: 1.1.0-dev (LLM 提示词助理功能开发中) ⭐
 **主要语言**: JavaScript (JSX)
 
 ## 架构说明
@@ -63,6 +63,8 @@
 - **ws** - WebSocket 代理
 - **http-proxy-middleware** - HTTP 代理中间件
 - **cors** - CORS 处理
+- **openai** - Grok API 客户端（用于提示词助理）
+- **express-rate-limit** - API 限流
 
 ### 数据持久化
 - **localStorage** - 保存用户设置、提示词、主题配置等
@@ -100,10 +102,23 @@ CorineGen/
 ├── backend/                        # 后端 (本机部署)
 │   ├── src/
 │   │   ├── index.js               # Express 入口
+│   │   ├── config/                # 配置模块
+│   │   │   ├── grokConfig.js      # Grok API 配置 ⭐
+│   │   │   └── systemPrompts.js   # 系统提示词配置 ⭐⭐
+│   │   ├── services/              # 服务层
+│   │   │   └── grokClient.js      # Grok API 客户端
+│   │   ├── controllers/           # 控制器
+│   │   │   └── promptController.js # 提示词助理控制器
+│   │   ├── schemas/               # JSON Schema
+│   │   │   ├── variationSchema.js  # 变体生成 Schema
+│   │   │   └── scriptSchema.js     # 剧本生成 Schema
+│   │   ├── middleware/            # 中间件
+│   │   │   └── rateLimiter.js     # API 限流
 │   │   └── proxy/
 │   │       └── wsProxy.js         # WebSocket 代理
 │   ├── package.json
-│   └── .env                       # 环境变量配置
+│   ├── test-api.js                # API 测试脚本
+│   └── .env                       # 环境变量配置 ⭐⭐
 │
 ├── docs/
 │   └── deployment.md              # 部署指南
@@ -218,6 +233,156 @@ imageRetryCount: 0       // 重试次数
 2. 手动重连成功 → 重新加载所有失败图片
 3. 生成时连接恢复 → 重新加载所有失败图片
 
+### 11. LLM 提示词助理 ⭐ 新功能 (v1.1.0+)
+**功能**: 使用 Grok AI 优化和生成提示词，支持 4 种智能模式
+
+#### 入口
+- **位置**: 提示词输入框左下角
+- **图标**: 魔法棒图标 (Wand2)
+- **触发**: 点击打开提示词助理 Modal 面板
+
+#### 四种模式
+
+**1. 创建变体 (variation)** - 生成 3-5 个提示词变体
+- **特殊字符**:
+  - `#`: 标记需要变化的内容
+  - `@`: 后跟 0-1 的浮点数，表示变化程度
+  - `()`: 特殊偏好说明
+- **示例**: `a girl, #wearing red dress@0.8(prefer blue tones), standing in the garden`
+- **输出**: 4 个蓝色调服装变体
+
+**2. 扩写润色 (polish)** - 智能扩充提示词细节
+- **特殊字符**:
+  - `[]` 或 `【】`: 标记需要扩写的部分
+  - `...`: 扩写程度（点号越多扩写越详细）
+    - `.` - 轻微扩写（1-2 个细节）
+    - `..` - 适度扩写（3-5 个细节）
+    - `...` - 中等扩写（5-8 个细节）
+    - `....` - 深度扩写（8+ 个细节）
+- **示例**: `a girl, [wearing dress......], standing in the [garden..]`
+- **输出**: 详细扩写的服装和场景描述
+
+**3. 脑补后续 (continue)** - 设计下一个分镜
+- **输入**: 当前分镜的提示词
+- **输出**: 连贯的下一个分镜提示词
+- **特点**: 保持人物、服装、场景的一致性
+
+**4. 生成剧本 (script)** - 生成完整分镜剧本
+- **输入**: 故事大纲或情节描述
+- **输出**: 4-8 个完整分镜提示词
+- **特点**: 起承转合，全局一致性
+
+#### 技术实现
+
+**后端架构**:
+```
+后端 (Express) → Grok API (JieKou AI) → GPT-4 级模型
+     ↓                    ↓
+  参数处理          结构化输出 / 文本输出
+```
+
+**API 端点**:
+- `POST /api/prompt-assistant/generate` - 生成提示词
+- `GET /api/prompt-assistant/health` - 健康检查
+
+**请求格式**:
+```json
+{
+  "mode": "variation",  // variation | polish | continue | script
+  "input": "用户输入的提示词"
+}
+```
+
+**响应格式**:
+```json
+{
+  "success": true,
+  "mode": "variation",
+  "data": ["提示词1", "提示词2", "提示词3"]
+}
+```
+
+#### 如何修改系统提示词 ⭐⭐ 重要
+
+**文件位置**: `backend/src/config/systemPrompts.js`
+
+```javascript
+export const SYSTEM_PROMPTS = {
+  variation: `你是文生图提示词工程师...`,  // 修改创建变体的提示词
+  polish: `你是文生图提示词工程师...`,     // 修改扩写润色的提示词
+  continue: `你是文生图提示词工程师...`,   // 修改脑补后续的提示词
+  script: `你是文生图提示词工程师...`      // 修改剧本生成的提示词
+};
+```
+
+**修改步骤**:
+1. 编辑 `backend/src/config/systemPrompts.js`
+2. 修改对应模式的提示词内容
+3. 保存文件
+4. 重启后端服务: `cd backend && pm2 restart corinegen-backend`
+5. 使用 `node test-api.js` 测试修改效果
+
+**调优参数** (在 `backend/src/controllers/promptController.js` 中):
+```javascript
+// variation 模式 - 高创造性
+temperature: 1.2
+
+// polish 模式 - 适度创造性
+temperature: 0.8
+
+// continue 和 script 模式 - 平衡
+temperature: 1.0
+```
+
+#### 环境配置 ⭐⭐
+
+**文件**: `backend/.env`
+
+```bash
+# Grok API 配置
+GROK_API_KEY=sk_xxx...                        # JieKou AI API Key
+GROK_API_BASE_URL=https://api.jiekou.ai/openai
+GROK_MODEL=grok-4-1-fast-reasoning            # 使用的模型
+GROK_RATE_LIMIT_PER_MINUTE=10                 # 限流（次/分钟）
+GROK_MAX_TOKENS=1000000                       # 最大 Token 数
+```
+
+**修改 API Key**:
+1. 访问 https://jiekou.ai 获取新的 API Key
+2. 编辑 `backend/.env` 文件
+3. 修改 `GROK_API_KEY=新的Key`
+4. 重启后端服务
+
+**修改限流**:
+- 修改 `GROK_RATE_LIMIT_PER_MINUTE` 的值
+- 默认 10 次/分钟，可根据需要调整
+- 重启后端后生效
+
+#### 性能指标
+
+| 模式 | 平均响应时间 | 输出数量 |
+|------|-------------|---------|
+| variation | 6-7s | 3-5 个变体 |
+| polish | 5-6s | 1 个扩写结果 |
+| continue | 5-6s | 1 个后续分镜 |
+| script | 12-15s | 4-8 个分镜 |
+
+#### 状态持久化
+- 使用 localStorage 保存面板状态
+- 包括: 当前模式、输入内容、生成结果、选中索引
+- 关闭面板不清空状态，下次打开恢复
+
+#### 测试脚本
+
+**文件**: `backend/test-api.js`
+
+```bash
+cd backend
+node test-api.js
+```
+
+测试所有 4 种模式，输出详细结果和响应时间。
+
 ## API 配置与认证
 
 ### 环境判断
@@ -265,6 +430,14 @@ ALLOWED_ORIGINS=http://localhost:5173,https://corine-gen.vercel.app
 | WebSocket 客户端 | services/wsClient.js | 全文 |
 | 后端入口 | backend/src/index.js | 全文 |
 | WebSocket 代理 | backend/src/proxy/wsProxy.js | 全文 |
+| **LLM 系统提示词配置 ⭐⭐** | **backend/src/config/systemPrompts.js** | **全文** |
+| LLM Grok API 配置 | backend/src/config/grokConfig.js | 全文 |
+| LLM API 客户端 | backend/src/services/grokClient.js | 全文 |
+| LLM 控制器 | backend/src/controllers/promptController.js | 全文 |
+| LLM 变体 Schema | backend/src/schemas/variationSchema.js | 全文 |
+| LLM 剧本 Schema | backend/src/schemas/scriptSchema.js | 全文 |
+| LLM 限流中间件 | backend/src/middleware/rateLimiter.js | 全文 |
+| LLM API 测试脚本 | backend/test-api.js | 全文 |
 | ComfyUI 连接检查 | App.jsx | 530-570 |
 | LoRA 列表获取 | App.jsx | 512-524 |
 | 图像生成队列 | App.jsx | 972-1042 |
@@ -503,11 +676,11 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 - `perf`: 性能优化
 
 ### 最近提交历史
+- `7f0f869` test: 完成 LLM 提示词助理后端 API 测试验收 ⭐
+- `815153f` feat: 实现 LLM 提示词助理后端核心功能 (Phase 1) ⭐
+- `6b466c8` docs: 新增 LLM 提示词助理功能需求文档 ⭐
 - `3b80d0b` feat: 添加图片加载失败自动恢复机制
 - `0e4078e` fix: 修复连接状态横幅显示错误
-- `e9b63c3` 更新claude文档
-- `d17d7a4` docs: 更新所有文档反映当前架构
-- `a87f1fb` refactor: 禁用前端 API Key 认证
 
 ## 快速命令
 
@@ -538,11 +711,21 @@ git log --oneline -5
 
 ## 相关文档
 
+### 主要文档
 - **README.md**: 用户使用指南
 - **DEVELOPMENT.md**: 详细开发文档
 - **docs/deployment.md**: 部署指南
 - **frontend/package.json**: 前端依赖和脚本
 - **backend/package.json**: 后端依赖和脚本
+
+### LLM 提示词助理文档 ⭐
+- **LLM_Integration/RequirementDraft.md**: 完整需求文档（前后端设计）
+- **LLM_Integration/DevelopmentProgress.md**: 开发进度追踪（实时更新）
+- **LLM_Integration/CONTEXT_SUMMARY.md**: 上下文总结（快速参考）
+- **LLM_Integration/系统提示词预设模板.md**: 4 种模式的提示词模板
+- **LLM_Integration/GrokAPI请求示例.md**: API 调用示例
+- **LLM_Integration/Grok详细文档.md**: Grok API 完整文档
+- **LLM_Integration/如何使用结构化输出.md**: JSON Schema 使用指南
 
 ## AI 助手工作流程
 
@@ -578,6 +761,6 @@ git log --oneline -5
 
 ---
 
-**最后更新**: 2026-01-18
+**最后更新**: 2026-01-19
 **维护者**: Claude Code Assistant
-**当前架构**: 前后端分离 + 无认证
+**当前架构**: 前后端分离 + 无认证 + LLM 提示词助理 ⭐
