@@ -4240,6 +4240,41 @@ const App = () => {
                 <div className="prompt-assistant-char-count">
                   {assistantInput.length} 字符
                 </div>
+
+                {/* 特殊字符指南 - 仅在输入为空且为特定模式时显示 */}
+                {!assistantInput && (assistantMode === 'variation' || assistantMode === 'polish') && (
+                  <div className="prompt-assistant-guide">
+                    {assistantMode === 'variation' && (
+                      <>
+                        <p className="guide-title">💡 使用特殊字符增强控制：</p>
+                        <ul className="guide-list">
+                          <li><strong>#</strong> 标记需要变化的内容</li>
+                          <li><strong>@</strong> 后跟 0-1 的数字表示变化程度 (0.8 = 80%变化)</li>
+                          <li><strong>()</strong> 内写特殊偏好说明</li>
+                        </ul>
+                        <p className="guide-example">
+                          例如: a girl, #wearing red dress@0.8(prefer blue tones)
+                        </p>
+                      </>
+                    )}
+                    {assistantMode === 'polish' && (
+                      <>
+                        <p className="guide-title">💡 使用特殊字符控制扩写：</p>
+                        <ul className="guide-list">
+                          <li><strong>[]</strong> 或 <strong>【】</strong> 标记需要扩写的部分</li>
+                          <li><strong>...</strong> 的数量表示扩写程度</li>
+                          <li>• <strong>.</strong> - 轻微扩写 (1-2 个细节)</li>
+                          <li>• <strong>..</strong> - 适度扩写 (3-5 个细节)</li>
+                          <li>• <strong>...</strong> - 中等扩写 (5-8 个细节)</li>
+                          <li>• <strong>....</strong> - 深度扩写 (8+ 个细节)</li>
+                        </ul>
+                        <p className="guide-example">
+                          例如: a girl, [wearing dress......], standing in the [garden..]
+                        </p>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* 生成按钮 */}
@@ -4251,12 +4286,59 @@ const App = () => {
                 {isGeneratingPrompt ? '生成中...' : '生成'}
               </button>
 
-              {/* 结果预览区域 - 临时占位 */}
+              {/* 结果预览区域 */}
               <div className="prompt-assistant-results">
-                <p style={{ color: 'rgba(255,255,255,0.4)', textAlign: 'center', marginTop: '32px' }}>
-                  点击"生成"按钮获取 AI 优化建议
-                </p>
+                {/* 空状态 - 没有结果 */}
+                {!isGeneratingPrompt && assistantResults.length === 0 && (
+                  <div className="prompt-assistant-empty-state">
+                    <p className="empty-state-text">点击"生成"按钮获取 AI 优化建议</p>
+                  </div>
+                )}
+
+                {/* 加载状态 */}
+                {isGeneratingPrompt && (
+                  <div className="prompt-assistant-loading">
+                    <div className="loading-spinner"></div>
+                    <p className="loading-text">AI 正在思考中...</p>
+                  </div>
+                )}
+
+                {/* 结果列表 */}
+                {!isGeneratingPrompt && assistantResults.length > 0 && (
+                  <div className="prompt-assistant-results-list">
+                    <p className="results-header">
+                      生成了 {assistantResults.length} 个结果，选择一个应用：
+                    </p>
+                    {assistantResults.map((result, index) => (
+                      <label
+                        key={index}
+                        className={`result-card ${selectedResultIndex === index ? 'selected' : ''}`}
+                      >
+                        <input
+                          type="radio"
+                          name="prompt-result"
+                          checked={selectedResultIndex === index}
+                          onChange={() => setSelectedResultIndex(index)}
+                        />
+                        <div className="result-content">
+                          <span className="result-number">#{index + 1}</span>
+                          <p className="result-text">{result}</p>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                )}
               </div>
+
+              {/* 应用按钮 - 只在有结果时显示 */}
+              {!isGeneratingPrompt && assistantResults.length > 0 && (
+                <button
+                  className="prompt-assistant-apply-button"
+                  onClick={() => alert('应用功能开发中')}
+                >
+                  应用选中的提示词
+                </button>
+              )}
             </div>
           </div>
         </div>
