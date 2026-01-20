@@ -199,6 +199,7 @@ const App = () => {
   const [selectedResultIndex, setSelectedResultIndex] = useState(() => loadFromStorage('corineGen_selectedResultIndex', 0));
   const [isGeneratingPrompt, setIsGeneratingPrompt] = useState(false); // 生成中
   const [assistantError, setAssistantError] = useState(null); // 错误信息
+  const [assistantSourcePromptId, setAssistantSourcePromptId] = useState(null); // 记录从哪个提示词打开的助理
   const [newPresetName, setNewPresetName] = useState('');
   const [hoveredPresetId, setHoveredPresetId] = useState(null);
 
@@ -2881,6 +2882,44 @@ const App = () => {
     console.log(`[Prompt Assistant] 添加新提示词: ${text.slice(0, 50)}...`);
   };
 
+  // 替换来源提示词的文本（长按触发）
+  const replacePromptWithText = (text) => {
+    const targetId = assistantSourcePromptId || prompts[0]?.id;
+    if (targetId) {
+      updatePromptText(targetId, text);
+      console.log(`[Prompt Assistant] 替换提示词 ID ${targetId}: ${text.slice(0, 50)}...`);
+    }
+  };
+
+  // 长按计时器
+  const longPressTimerRef = useRef(null);
+  const isLongPressRef = useRef(false);
+
+  // 处理按下（开始长按计时）
+  const handleAddButtonMouseDown = (text) => {
+    isLongPressRef.current = false;
+    longPressTimerRef.current = setTimeout(() => {
+      isLongPressRef.current = true;
+      replacePromptWithText(text);
+    }, 500); // 500ms 触发长按
+  };
+
+  // 处理松开（取消长按或执行点击）
+  const handleAddButtonMouseUp = (text) => {
+    clearTimeout(longPressTimerRef.current);
+    if (!isLongPressRef.current) {
+      // 短按：添加新提示词
+      addPromptWithText(text);
+    }
+    isLongPressRef.current = false;
+  };
+
+  // 处理离开（取消长按）
+  const handleAddButtonMouseLeave = () => {
+    clearTimeout(longPressTimerRef.current);
+    isLongPressRef.current = false;
+  };
+
   // 下载分镜脚本
   const downloadScript = () => {
     const scriptResults = assistantResults.script || [];
@@ -3201,8 +3240,9 @@ const App = () => {
                   <button
                     className="prompt-assistant-button"
                     onClick={() => {
-                      // 打开 Modal 时自动填充当前提示词
+                      // 打开 Modal 时自动填充当前提示词并记录来源
                       setAssistantInput(promptItem.text);
+                      setAssistantSourcePromptId(promptItem.id);
                       setPromptAssistantOpen(true);
                     }}
                     disabled={isGeneratingPrompt}
@@ -4459,7 +4499,7 @@ const App = () => {
                     {!isGeneratingPrompt && assistantResults[assistantMode]?.length > 0 && assistantMode === 'variation' && (
                       <div className="prompt-assistant-results-list">
                         <p className="results-header">
-                          生成了 {assistantResults[assistantMode].length} 个变体，点击"+"添加到提示词列表：
+                          生成了 {assistantResults[assistantMode].length} 个变体（单击"+"新增提示词，长按替换来源提示词）
                         </p>
                         {assistantResults[assistantMode].map((result, index) => (
                           <div key={index} className="result-card-with-action">
@@ -4469,8 +4509,10 @@ const App = () => {
                             </div>
                             <button
                               className="result-add-button"
-                              onClick={() => addPromptWithText(result)}
-                              title="添加到提示词列表"
+                              onMouseDown={() => handleAddButtonMouseDown(result)}
+                              onMouseUp={() => handleAddButtonMouseUp(result)}
+                              onMouseLeave={handleAddButtonMouseLeave}
+                              title="单击新增，长按替换"
                             >
                               +
                             </button>
@@ -4483,7 +4525,7 @@ const App = () => {
                     {!isGeneratingPrompt && assistantResults[assistantMode]?.length > 0 && (assistantMode === 'polish' || assistantMode === 'continue') && (
                       <div className="prompt-assistant-results-list">
                         <p className="results-header">
-                          {assistantMode === 'polish' ? '扩写润色结果：' : '后续分镜提示词：'}
+                          {assistantMode === 'polish' ? '扩写润色结果（单击"+"新增提示词，长按替换来源提示词）' : '后续分镜提示词（单击"+"新增提示词，长按替换来源提示词）'}
                         </p>
                         <div className="result-card-with-action">
                           <div className="result-content">
@@ -4491,8 +4533,10 @@ const App = () => {
                           </div>
                           <button
                             className="result-add-button"
-                            onClick={() => addPromptWithText(assistantResults[assistantMode][0])}
-                            title="添加到提示词列表"
+                            onMouseDown={() => handleAddButtonMouseDown(assistantResults[assistantMode][0])}
+                            onMouseUp={() => handleAddButtonMouseUp(assistantResults[assistantMode][0])}
+                            onMouseLeave={handleAddButtonMouseLeave}
+                            title="单击新增，长按替换"
                           >
                             +
                           </button>
@@ -4504,7 +4548,7 @@ const App = () => {
                     {!isGeneratingPrompt && assistantResults[assistantMode]?.length > 0 && assistantMode === 'script' && (
                       <div className="prompt-assistant-results-list">
                         <p className="results-header">
-                          生成了 {assistantResults[assistantMode].length} 个分镜，点击"+"添加到提示词列表：
+                          生成了 {assistantResults[assistantMode].length} 个分镜（单击"+"新增提示词，长按替换来源提示词）
                         </p>
                         {assistantResults[assistantMode].map((result, index) => (
                           <div key={index} className="result-card-with-action">
@@ -4514,8 +4558,10 @@ const App = () => {
                             </div>
                             <button
                               className="result-add-button"
-                              onClick={() => addPromptWithText(result)}
-                              title="添加到提示词列表"
+                              onMouseDown={() => handleAddButtonMouseDown(result)}
+                              onMouseUp={() => handleAddButtonMouseUp(result)}
+                              onMouseLeave={handleAddButtonMouseLeave}
+                              title="单击新增，长按替换"
                             >
                               +
                             </button>
