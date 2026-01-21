@@ -1361,7 +1361,7 @@ const App = () => {
   };
 
   // 启动后台轮询
-  const startRecoveryPolling = (tasks) => {
+  const startRecoveryPolling = (tasks, onComplete) => {
     const POLL_INTERVAL = 3000;  // 3 秒
     const MAX_TIMEOUT = 5 * 60 * 1000;  // 5 分钟
     const startTime = Date.now();
@@ -1382,6 +1382,7 @@ const App = () => {
         });
         setImagePlaceholders([...imagePlaceholdersRef.current]);
         console.log('[会话恢复] 轮询超时，标记为 timeout');
+        if (onComplete) onComplete();
         return;
       }
 
@@ -1403,6 +1404,7 @@ const App = () => {
         setTimeout(poll, POLL_INTERVAL);
       } else {
         console.log('[会话恢复] 所有任务已恢复完成');
+        if (onComplete) onComplete();
       }
     };
 
@@ -1478,9 +1480,46 @@ const App = () => {
       }
     }
 
+    // 继续生成剩余的 queue 状态占位符
+    const continueQueuePlaceholders = () => {
+      const queuePlaceholders = imagePlaceholdersRef.current.filter(p => p.status === 'queue');
+      if (queuePlaceholders.length === 0) {
+        // 检查 generationQueue 是否有待处理的任务
+        if (generationQueueRef.current.length > 0) {
+          processQueue();
+        } else {
+          setIsGenerating(false);
+        }
+        return;
+      }
+
+      // 找第一个 queue 占位符的批次，继续生成
+      const firstQueuePlaceholder = queuePlaceholders[0];
+      const prompt = prompts.find(p => p.id === firstQueuePlaceholder.promptId);
+
+      if (prompt && prompt.text.trim()) {
+        const batchQueueCount = queuePlaceholders.filter(p => p.batchId === firstQueuePlaceholder.batchId).length;
+        console.log(`[会话恢复] 继续生成 ${batchQueueCount} 个剩余图片，batchId: ${firstQueuePlaceholder.batchId}`);
+        setIsGenerating(true);
+        generateLoop(
+          firstQueuePlaceholder.promptId,
+          prompt.text,
+          queuePlaceholders.filter(p => p.batchId === firstQueuePlaceholder.batchId),
+          firstQueuePlaceholder.batchId,
+          firstQueuePlaceholder.savedParams
+        );
+      } else {
+        console.warn('[会话恢复] 找不到对应的 prompt，无法继续生成');
+        setIsGenerating(false);
+      }
+    };
+
     // 5. 如果有未完成的任务，启动后台轮询
     if (pendingTasks.length > 0) {
-      startRecoveryPolling(pendingTasks);
+      startRecoveryPolling(pendingTasks, continueQueuePlaceholders);
+    } else {
+      // 没有轮询任务，直接检查是否有 queue 占位符需要继续
+      continueQueuePlaceholders();
     }
 
     // 6. 清空旧的提交记录
@@ -1496,11 +1535,6 @@ const App = () => {
       savedParams: null,
       reason: ''
     });
-
-    // 8. 如果有队列，继续处理
-    if (generationQueueRef.current.length > 0) {
-      processQueue();
-    }
   };
 
   // 会话恢复逻辑：放弃并开始新会话
