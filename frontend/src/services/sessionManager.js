@@ -61,6 +61,7 @@ export class SessionManager {
     const minimalPlaceholders = sessionData.placeholders.map(p => ({
       id: p.id,
       status: p.status,
+      isLoading: p.isLoading,  // 保存 loading 状态，用于恢复时判断
       imageUrl: p.imageUrl,
       filename: p.filename,
       promptId: p.promptId,
