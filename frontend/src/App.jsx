@@ -1319,19 +1319,110 @@ const App = () => {
   };
 
   // 处理队列
+  // 单次查询 History API
+  const queryHistoryOnce = async (promptId) => {
+    try {
+      const response = await fetch(`${COMFYUI_API}/history/${promptId}`, {
+        headers: getAuthHeaders()
+      });
+      if (!response.ok) return null;
+
+      const history = await response.json();
+      const outputs = history[promptId]?.outputs;
+      if (!outputs) return null;
+
+      const outputNode = Object.keys(outputs)[0];
+      return outputs[outputNode]?.images || null;
+    } catch (error) {
+      console.error(`[会话恢复] 查询任务 ${promptId} 失败:`, error);
+      return null;
+    }
+  };
+
+  // 更新已恢复的占位符
+  const updateRecoveredPlaceholders = (task, images) => {
+    images.forEach((img, index) => {
+      const placeholderId = task.placeholderIds[index];
+      if (!placeholderId) return;
+
+      const imageUrl = getImageUrl(img.filename, img.subfolder, img.type);
+
+      imagePlaceholdersRef.current = imagePlaceholdersRef.current.map(p =>
+        p.id === placeholderId ? {
+          ...p,
+          status: 'completed',
+          imageUrl: imageUrl,
+          filename: img.filename,
+          progress: 100
+        } : p
+      );
+    });
+    setImagePlaceholders([...imagePlaceholdersRef.current]);
+  };
+
+  // 启动后台轮询
+  const startRecoveryPolling = (tasks) => {
+    const POLL_INTERVAL = 3000;  // 3 秒
+    const MAX_TIMEOUT = 5 * 60 * 1000;  // 5 分钟
+    const startTime = Date.now();
+
+    const poll = async () => {
+      // 检查超时
+      if (Date.now() - startTime > MAX_TIMEOUT) {
+        // 标记剩余任务为 timeout
+        tasks.forEach(task => {
+          task.placeholderIds.forEach(id => {
+            imagePlaceholdersRef.current = imagePlaceholdersRef.current.map(p =>
+              p.id === id && p.status === 'recovering' ? {
+                ...p,
+                status: 'timeout'
+              } : p
+            );
+          });
+        });
+        setImagePlaceholders([...imagePlaceholdersRef.current]);
+        console.log('[会话恢复] 轮询超时，标记为 timeout');
+        return;
+      }
+
+      // 查询每个未完成的任务
+      for (let i = tasks.length - 1; i >= 0; i--) {
+        const task = tasks[i];
+        const images = await queryHistoryOnce(task.promptId);
+
+        if (images) {
+          console.log(`[会话恢复] 任务 ${task.promptId} 已完成`);
+          updateRecoveredPlaceholders(task, images);
+          tasks.splice(i, 1);  // 从队列移除
+        }
+      }
+
+      // 如果还有未完成的，继续轮询
+      if (tasks.length > 0) {
+        console.log(`[会话恢复] 还有 ${tasks.length} 个任务等待恢复，继续轮询...`);
+        setTimeout(poll, POLL_INTERVAL);
+      } else {
+        console.log('[会话恢复] 所有任务已恢复完成');
+      }
+    };
+
+    console.log(`[会话恢复] 启动轮询，共 ${tasks.length} 个任务`);
+    poll();
+  };
+
   // 会话恢复逻辑：继续执行
   const handleContinueSession = async () => {
     setShowRestoreDialog(false);
 
-    // 1. 恢复所有占位符，但将未完成的重置为 'queue' 状态
+    // 1. 恢复所有占位符
     const restoredPlaceholders = restoredSession.placeholders.map(p => {
       if (p.status === 'completed') {
         return p; // 已完成的保持不变
       } else {
-        // 未完成的（loading、generating、queue）重置为 queue
+        // 未完成的（loading、generating、queue）设为 recovering 状态
         return {
           ...p,
-          status: 'queue',
+          status: 'recovering',  // 新状态：恢复中
           progress: 0,
           isLoading: false
         };
@@ -1351,67 +1442,32 @@ const App = () => {
     nextBatchId.current = restoredSession.nextBatchId;
     sessionIdRef.current = restoredSession.sessionId;
 
-    // 4. 清空旧的提交记录
-    submittedTasksRef.current = [];
-
-    // 5. 查询已提交任务的状态，就地更新占位符
+    // 4. 查询已提交任务状态并启动轮询
     const submittedTasks = restoredSession.submittedTasks || [];
+    const pendingTasks = [];
 
     for (const task of submittedTasks) {
       if (task.status === 'pending') {
-        try {
-          const historyResponse = await fetch(
-            `${COMFYUI_API}/history/${task.promptId}`,
-            {
-              headers: getAuthHeaders()
-            }
-          );
-
-          if (historyResponse.ok) {
-            const history = await historyResponse.json();
-            const outputs = history[task.promptId]?.outputs;
-
-            if (outputs) {
-              // 任务已完成，提取图片并就地更新占位符
-              const outputNode = Object.keys(outputs)[0];
-              const images = outputs[outputNode]?.images || [];
-
-              if (images.length > 0) {
-                console.log(`[会话恢复] 任务 ${task.promptId} 已完成，更新 ${images.length} 张图片`);
-
-                // 就地更新对应的占位符
-                images.forEach((img, index) => {
-                  const placeholderId = task.placeholderIds[index];
-                  if (!placeholderId) return;
-
-                  const imageUrl = getImageUrl(img.filename, img.subfolder, img.type);
-
-                  imagePlaceholdersRef.current = imagePlaceholdersRef.current.map(p =>
-                    p.id === placeholderId ? {
-                      ...p,
-                      status: 'completed',
-                      imageUrl: imageUrl,
-                      filename: img.filename,
-                      progress: 100
-                    } : p
-                  );
-                });
-
-                setImagePlaceholders([...imagePlaceholdersRef.current]);
-              }
-            } else {
-              // 任务还没完成（还在 ComfyUI 队列中或正在生成）
-              // 占位符保持 'queue' 状态，用户需要等待或重新生成
-              console.log(`[会话恢复] 任务 ${task.promptId} 还未完成，保持等待状态`);
-            }
-          }
-        } catch (error) {
-          console.error(`[会话恢复] 查询任务 ${task.promptId} 失败:`, error);
+        const outputs = await queryHistoryOnce(task.promptId);
+        if (outputs) {
+          // 已完成，立即更新占位符
+          updateRecoveredPlaceholders(task, outputs);
+        } else {
+          // 未完成，加入轮询队列
+          pendingTasks.push(task);
         }
       }
     }
 
-    // 6. 重置恢复状态
+    // 5. 如果有未完成的任务，启动后台轮询
+    if (pendingTasks.length > 0) {
+      startRecoveryPolling(pendingTasks);
+    }
+
+    // 6. 清空旧的提交记录
+    submittedTasksRef.current = [];
+
+    // 7. 重置恢复状态
     setRecoveryState({
       isPaused: false,
       pausedBatchId: null,
@@ -1422,7 +1478,7 @@ const App = () => {
       reason: ''
     });
 
-    // 7. 如果有队列，继续处理
+    // 8. 如果有队列，继续处理
     if (generationQueueRef.current.length > 0) {
       processQueue();
     }
@@ -3246,8 +3302,9 @@ const App = () => {
 
             <div className="restore-info">
               <p>
-                上次会话包含 <strong>{restoredSession.queue.length}</strong> 个待执行任务
-                和 <strong>{restoredSession.placeholders.filter(p => p.status === 'completed').length}</strong> 张已生成的图片
+                上次会话包含 <strong>{restoredSession.queue.length}</strong> 个待执行任务，
+                <strong>{restoredSession.placeholders.filter(p => p.status !== 'completed').length}</strong> 张恢复中图片，
+                和 <strong>{restoredSession.placeholders.filter(p => p.status === 'completed').length}</strong> 张已生成图片
               </p>
               <p className="restore-time">
                 最后更新时间：{new Date(restoredSession.timestamp).toLocaleString('zh-CN')}

@@ -1610,6 +1610,56 @@ body {
   z-index: 10;
 }
 
+/* recovering 状态 - 恢复中 */
+.image-placeholder.recovering .skeleton {
+  background: linear-gradient(
+    90deg,
+    hsla(calc(var(--theme-hue) * 1), calc(var(--theme-bg-saturation) * 1%), calc(var(--theme-bg-lightness) * 1%), 0.6) 25%,
+    hsla(calc(var(--theme-hue) * 1), calc(var(--theme-bg-saturation) * 1%), calc(var(--theme-bg-lightness) * 2%), 0.8) 50%,
+    hsla(calc(var(--theme-hue) * 1), calc(var(--theme-bg-saturation) * 1%), calc(var(--theme-bg-lightness) * 1%), 0.6) 75%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-loading 1.5s infinite;
+}
+
+@keyframes skeleton-loading {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.image-placeholder.recovering .skeleton::before {
+  content: '恢复中...';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--theme-text);
+  font-size: 14px;
+  z-index: 10;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8);
+}
+
+/* timeout 状态 - 恢复超时 */
+.image-placeholder.timeout .skeleton {
+  background: rgba(255, 68, 68, 0.15);
+}
+
+.image-placeholder.timeout .skeleton::before {
+  content: '恢复超时';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: #ff4444;
+  font-size: 14px;
+  z-index: 10;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8);
+}
+
 .generated-image {
   width: 100%;
   height: 100%;
