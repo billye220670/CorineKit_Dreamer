@@ -2170,15 +2170,12 @@ const App = () => {
         const result = await promptResponse.json();
 
         // 记录提交的任务到 submittedTasks（用于会话恢复）
+        // loop 模式下只记录当前占位符，不是所有相同 batchId 的占位符
         if (result.prompt_id) {
-          const placeholderIds = imagePlaceholdersRef.current
-            .filter(p => p.batchId === batchId)
-            .map(p => p.id);
-
           submittedTasksRef.current.push({
             promptId: result.prompt_id,
             batchId: batchId,
-            placeholderIds: placeholderIds,
+            placeholderIds: [targetPlaceholder.id],  // 只记录当前这一个
             timestamp: Date.now(),
             status: 'pending'
           });
