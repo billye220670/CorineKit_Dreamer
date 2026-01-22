@@ -1218,6 +1218,7 @@ const App = () => {
       console.error('[generateForPrompt] 生成错误:', err);
       setError('生成失败: ' + err.message);
     } finally {
+      console.log('[generateForPrompt] finally 块执行 - batchId:', finalBatchId);
       // 标记提示词为非生成中
       setPrompts(prev => prev.map(p => p.id === promptId ? { ...p, isGenerating: false } : p));
       processQueue();
@@ -1580,7 +1581,9 @@ const App = () => {
   };
 
   const processQueue = () => {
+    console.log('[processQueue] 被调用 - 队列长度:', generationQueueRef.current.length);
     if (generationQueueRef.current.length === 0) {
+      console.log('[processQueue] 队列为空，停止生成');
       setIsGenerating(false);
 
       // 如果启用了生图队列优先，且高清化队列有任务等待，启动高清化
@@ -1597,6 +1600,7 @@ const App = () => {
     }
 
     const nextTask = generationQueueRef.current[0];
+    console.log('[processQueue] 处理下一个任务 - batchId:', nextTask.batchId, 'promptId:', nextTask.promptId);
     generationQueueRef.current = generationQueueRef.current.slice(1);
     setGenerationQueue(generationQueueRef.current);
     setIsGenerating(true);
