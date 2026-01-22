@@ -1628,63 +1628,60 @@ const App = () => {
       steps: steps
     };
 
-    // 循环 batchSize 次，每次创建一个独立的占位符和任务
-    const newPlaceholders = [];
-    const newQueueItems = [];
+    console.log('[queueGeneration] 测试模式：延迟提交任务 - batchSize:', batchSize);
 
+    // 测试：延迟 0.1 秒循环执行 batchSize 次
     for (let i = 0; i < batchSize; i++) {
-      const batchId = nextBatchId.current++;
+      setTimeout(() => {
+        const batchId = nextBatchId.current++;
 
-      const placeholder = {
-        id: `${promptId}-${batchId}-0`,
-        status: 'queue',
-        isLoading: false,
-        isNew: true,
-        progress: 0,
-        imageUrl: null,
-        filename: null,
-        promptId: promptId,
-        batchId: batchId,
-        upscaleStatus: 'none',
-        upscaleProgress: 0,
-        hqImageUrl: null,
-        hqFilename: null,
-        seed: null,
-        aspectRatio: currentAspectRatio,
-        savedParams: savedParams,
-        displayQuality: 'hq',
-        showQualityMenu: false,
-        imageLoadError: false,
-        imageRetryCount: 0
-      };
+        const placeholder = {
+          id: `${promptId}-${batchId}-0`,
+          status: 'queue',
+          isLoading: false,
+          isNew: true,
+          progress: 0,
+          imageUrl: null,
+          filename: null,
+          promptId: promptId,
+          batchId: batchId,
+          upscaleStatus: 'none',
+          upscaleProgress: 0,
+          hqImageUrl: null,
+          hqFilename: null,
+          seed: null,
+          aspectRatio: currentAspectRatio,
+          savedParams: savedParams,
+          displayQuality: 'hq',
+          showQualityMenu: false,
+          imageLoadError: false,
+          imageRetryCount: 0
+        };
 
-      newPlaceholders.push(placeholder);
-      newQueueItems.push({ promptId, promptText: prompt.text, batchId, savedParams });
-    }
+        console.log('[queueGeneration] 创建任务 - index:', i, 'batchId:', batchId);
 
-    // 一次性更新所有占位符
-    const updated = [...imagePlaceholdersRef.current, ...newPlaceholders];
-    imagePlaceholdersRef.current = updated;
-    setImagePlaceholders(updated);
+        // 更新占位符
+        const updated = [...imagePlaceholdersRef.current, placeholder];
+        imagePlaceholdersRef.current = updated;
+        setImagePlaceholders(updated);
 
-    // 新任务加入时自动滚动到底部
-    scrollToBottom();
+        // 新任务加入时自动滚动到底部
+        scrollToBottom();
 
-    // 处理队列：每个 batchId 都是独立任务，逐个处理
-    if (!isGenerating) {
-      // 第一个任务立即开始，其余加入队列
-      const firstTask = newQueueItems[0];
-      const remainingTasks = newQueueItems.slice(1);
+        // 创建任务项
+        const task = { promptId, promptText: prompt.text, batchId, savedParams };
 
-      setIsGenerating(true);
-      generationQueueRef.current = [...generationQueueRef.current, ...remainingTasks];
-      setGenerationQueue(generationQueueRef.current);
-
-      generateForPrompt(firstTask.promptId, firstTask.promptText, firstTask.batchId);
-    } else {
-      // 正在生成中，全部添加到队列
-      generationQueueRef.current = [...generationQueueRef.current, ...newQueueItems];
-      setGenerationQueue(generationQueueRef.current);
+        // 处理队列
+        if (!isGenerating) {
+          // 没有正在生成的任务，立即开始
+          setIsGenerating(true);
+          generateForPrompt(task.promptId, task.promptText, task.batchId);
+        } else {
+          // 正在生成中，添加到队列
+          generationQueueRef.current = [...generationQueueRef.current, task];
+          setGenerationQueue(generationQueueRef.current);
+        }
+      }, i * 100); // 每隔 0.1 秒
     }
   };
 
