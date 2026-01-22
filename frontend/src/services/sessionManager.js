@@ -64,23 +64,30 @@ export class SessionManager {
     );
 
     // 2. 精简占位符数据（不保存临时状态字段）
-    const minimalPlaceholders = completedPlaceholders.map(p => ({
-      id: p.id,
-      status: p.status,
-      imageUrl: p.imageUrl,
-      filename: p.filename,
-      promptId: p.promptId,
-      batchId: p.batchId,
-      seed: p.seed,
-      aspectRatio: p.aspectRatio,
-      displayQuality: p.displayQuality,
-      hqImageUrl: p.hqImageUrl,           // 保留高清图
-      hqFilename: p.hqFilename,
-      savedParams: p.savedParams,
-      upscaleStatus: p.upscaleStatus,      // 保留高清化状态
-      upscaleProgress: p.upscaleProgress
-      // 不保存 imageLoadError, imageRetryCount, isLoading - 这些是临时状态
-    }));
+    // 正在高清化的图片重置为标清状态，只保留已完成高清化的结果
+    const minimalPlaceholders = completedPlaceholders.map(p => {
+      const isUpscaleCompleted = p.upscaleStatus === 'completed';
+
+      return {
+        id: p.id,
+        status: p.status,
+        imageUrl: p.imageUrl,
+        filename: p.filename,
+        promptId: p.promptId,
+        batchId: p.batchId,
+        seed: p.seed,
+        aspectRatio: p.aspectRatio,
+        displayQuality: p.displayQuality,
+        // 只有高清化完成的才保留高清图信息
+        hqImageUrl: isUpscaleCompleted ? p.hqImageUrl : undefined,
+        hqFilename: isUpscaleCompleted ? p.hqFilename : undefined,
+        savedParams: p.savedParams,
+        // 正在高清化的重置为 none，已完成的保留
+        upscaleStatus: isUpscaleCompleted ? 'completed' : 'none',
+        upscaleProgress: isUpscaleCompleted ? p.upscaleProgress : 0
+        // 不保存 imageLoadError, imageRetryCount, isLoading - 这些是临时状态
+      };
+    });
 
     // 3. 返回精简后的会话数据（清空队列和生成状态）
     return {
