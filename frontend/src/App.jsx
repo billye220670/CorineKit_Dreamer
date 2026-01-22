@@ -2236,16 +2236,21 @@ const App = () => {
       // 当 WebSocket 消息丢失时，轮询作为后备机制确保任务完成能被检测到
       const promptIdForPoll = result.prompt_id;
       if (promptIdForPoll) {
+        console.log('[generateLoop] 启动轮询 - promptId:', promptIdForPoll, 'placeholderId:', targetPlaceholder.id);
         pollInterval = setInterval(async () => {
           if (pollCompleted) return;
           try {
+            console.log('[generateLoop] 轮询检查中 - promptId:', promptIdForPoll);
             const historyResponse = await fetch(`${COMFYUI_API}/history/${promptIdForPoll}`, {
               headers: getAuthHeaders()
             });
             const history = await historyResponse.json();
-            if (history[promptIdForPoll]?.outputs) {
+            const hasOutputs = !!history[promptIdForPoll]?.outputs;
+            console.log('[generateLoop] 轮询结果 - hasOutputs:', hasOutputs, 'promptId:', promptIdForPoll);
+            if (hasOutputs) {
               // 任务已完成，检查占位符状态
               const placeholder = imagePlaceholdersRef.current.find(p => p.id === targetPlaceholder.id);
+              console.log('[generateLoop] 检查占位符 - found:', !!placeholder, 'status:', placeholder?.status);
               if (placeholder && placeholder.status !== 'completed' && placeholder.status !== 'revealing') {
                 console.warn('[generateLoop] 轮询检测到任务完成但 WebSocket 未通知，手动处理 - placeholderId:', targetPlaceholder.id, 'status:', placeholder.status);
                 pollCompleted = true;
