@@ -2000,6 +2000,8 @@ const App = () => {
     const clientId = generateClientId();
     let ws = null;
     let timeoutId = null;
+    let pollInterval = null;
+    let pollCompleted = false;
 
     try {
       const { workflow, seed } = buildWorkflow(promptText, 1, savedParams, targetPlaceholder.id);
@@ -2169,6 +2171,10 @@ const App = () => {
                   }
                 }
 
+                // 清除轮询（WebSocket 正常收到完成消息）
+                pollCompleted = true;
+                if (pollInterval) clearInterval(pollInterval);
+
                 if (ws) ws.close();
                 if (timeoutId) clearTimeout(timeoutId);
                 resolve();
@@ -2178,6 +2184,8 @@ const App = () => {
             // 执行错误消息
             if (type === 'execution_error') {
               console.error('执行错误:', data);
+              pollCompleted = true;
+              if (pollInterval) clearInterval(pollInterval);
               if (ws) ws.close();
               if (timeoutId) clearTimeout(timeoutId);
               reject(new Error(data.exception_message || '未知错误'));
@@ -2224,6 +2232,79 @@ const App = () => {
         });
       }
 
+      // 启动后备轮询检测（每 3 秒检查一次任务是否完成）
+      // 当 WebSocket 消息丢失时，轮询作为后备机制确保任务完成能被检测到
+      const promptIdForPoll = result.prompt_id;
+      pollInterval = setInterval(async () => {
+        if (pollCompleted) return;
+        try {
+          const historyResponse = await fetch(`${COMFYUI_API}/history/${promptIdForPoll}`, {
+            headers: getAuthHeaders()
+          });
+          const history = await historyResponse.json();
+          if (history[promptIdForPoll]?.outputs) {
+            // 任务已完成，检查占位符状态
+            const placeholder = imagePlaceholdersRef.current.find(p => p.id === targetPlaceholder.id);
+            if (placeholder && placeholder.status !== 'completed' && placeholder.status !== 'revealing') {
+              console.warn('[generateLoop] 轮询检测到任务完成但 WebSocket 未通知，手动处理 - placeholderId:', targetPlaceholder.id);
+              pollCompleted = true;
+              clearInterval(pollInterval);
+
+              // 手动触发完成处理
+              const outputs = history[promptIdForPoll].outputs;
+              for (const nodeId in outputs) {
+                if (outputs[nodeId].images && outputs[nodeId].images[0]) {
+                  const img = outputs[nodeId].images[0];
+                  const imageUrl = getImageUrl(img.filename, img.subfolder, img.type);
+
+                  console.log('[generateLoop] 轮询获取到图片:', img.filename);
+
+                  // 更新占位符为revealing状态
+                  updateImagePlaceholders(prev =>
+                    prev.map(p =>
+                      p.id === targetPlaceholder.id ? {
+                        ...p,
+                        status: 'revealing',
+                        progress: 100,
+                        imageUrl: imageUrl,
+                        filename: img.filename
+                      } : p
+                    )
+                  );
+
+                  // 延迟后设置为completed
+                  setTimeout(() => {
+                    updateImagePlaceholders(prev => {
+                      const completedPlaceholders = prev.map(p =>
+                        p.id === targetPlaceholder.id ? { ...p, status: 'completed' } : p
+                      );
+
+                      if (autoUpscaleAfterGen) {
+                        const completedPlaceholder = completedPlaceholders.find(p => p.id === targetPlaceholder.id);
+                        if (completedPlaceholder && completedPlaceholder.status === 'completed') {
+                          setTimeout(() => queueUpscale(completedPlaceholder.id), 0);
+                        }
+                      }
+
+                      return completedPlaceholders;
+                    });
+                  }, 800);
+
+                  break;
+                }
+              }
+
+              // 关闭 WebSocket
+              if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.close();
+              }
+            }
+          }
+        } catch (e) {
+          // 轮询错误静默处理，不影响正常流程
+        }
+      }, 3000);
+
       // 设置超时
       timeoutId = setTimeout(() => {
         if (ws) ws.close();
@@ -2242,6 +2323,10 @@ const App = () => {
 
     } catch (err) {
       console.error('[generateLoop] 生成错误:', err);
+
+      // 清除轮询
+      pollCompleted = true;
+      if (pollInterval) clearInterval(pollInterval);
 
       // 重置当前占位符为 failed
       updateImagePlaceholders(prev => prev.map(p =>
@@ -2301,6 +2386,8 @@ const App = () => {
     const uniqueId = `${batchId}_0`;
     let ws = null;
     let timeoutId = null;
+    let pollInterval = null;
+    let pollCompleted = false;
 
     try {
       // 根据模式构建工作流
@@ -2491,6 +2578,10 @@ const App = () => {
                   }
                 }
 
+                // 清除轮询（WebSocket 正常收到完成消息）
+                pollCompleted = true;
+                if (pollInterval) clearInterval(pollInterval);
+
                 if (ws) ws.close();
                 if (timeoutId) clearTimeout(timeoutId);
                 resolve();
@@ -2500,6 +2591,8 @@ const App = () => {
             // 执行错误消息
             if (type === 'execution_error') {
               console.error('执行错误:', data);
+              pollCompleted = true;
+              if (pollInterval) clearInterval(pollInterval);
               if (ws) ws.close();
               if (timeoutId) clearTimeout(timeoutId);
               reject(new Error(data.exception_message || '未知错误'));
@@ -2536,6 +2629,95 @@ const App = () => {
         throw new Error(`提交任务失败: ${errorData.error || errorData.node_errors ? JSON.stringify(errorData.node_errors || errorData.error) : promptResponse.status}`);
       }
 
+      const result = await promptResponse.json();
+
+      // 启动后备轮询检测（每 3 秒检查一次任务是否完成）
+      // 当 WebSocket 消息丢失时，轮询作为后备机制确保任务完成能被检测到
+      const promptIdForPoll = result.prompt_id;
+      if (promptIdForPoll) {
+        pollInterval = setInterval(async () => {
+          if (pollCompleted) return;
+          try {
+            const historyResponse = await fetch(`${COMFYUI_API}/history/${promptIdForPoll}`, {
+              headers: getAuthHeaders()
+            });
+            const history = await historyResponse.json();
+            if (history[promptIdForPoll]?.outputs) {
+              // 任务已完成，检查占位符状态
+              const placeholder = imagePlaceholdersRef.current.find(p => p.id === targetPlaceholder.id);
+              if (placeholder && placeholder.status !== 'completed' && placeholder.status !== 'revealing') {
+                console.warn('[generateWithRefImageLoop] 轮询检测到任务完成但 WebSocket 未通知，手动处理 - placeholderId:', targetPlaceholder.id);
+                pollCompleted = true;
+                clearInterval(pollInterval);
+
+                // 手动触发完成处理
+                const outputs = history[promptIdForPoll].outputs;
+                let savedImages = [];
+                let previewImages = [];
+
+                for (const nodeId in outputs) {
+                  if (outputs[nodeId].images) {
+                    outputs[nodeId].images.forEach(img => {
+                      if (img.type === 'output') {
+                        savedImages.push(img);
+                      } else {
+                        previewImages.push(img);
+                      }
+                    });
+                  }
+                }
+
+                const finalImage = savedImages[0] || previewImages[0];
+
+                if (finalImage) {
+                  const imageUrl = getImageUrl(finalImage.filename, finalImage.subfolder, finalImage.type);
+
+                  console.log('[generateWithRefImageLoop] 轮询获取到图片:', finalImage.filename);
+
+                  // 更新占位符为revealing状态
+                  updateImagePlaceholders(prev =>
+                    prev.map(p =>
+                      p.id === targetPlaceholder.id ? {
+                        ...p,
+                        status: 'revealing',
+                        progress: 100,
+                        imageUrl: imageUrl,
+                        filename: finalImage.filename
+                      } : p
+                    )
+                  );
+
+                  // 延迟后设置为completed
+                  setTimeout(() => {
+                    updateImagePlaceholders(prev => {
+                      const completedPlaceholders = prev.map(p =>
+                        p.id === targetPlaceholder.id ? { ...p, status: 'completed' } : p
+                      );
+
+                      if (autoUpscaleAfterGen) {
+                        const completedPlaceholder = completedPlaceholders.find(p => p.id === targetPlaceholder.id);
+                        if (completedPlaceholder && completedPlaceholder.status === 'completed') {
+                          setTimeout(() => queueUpscale(completedPlaceholder.id), 0);
+                        }
+                      }
+
+                      return completedPlaceholders;
+                    });
+                  }, 800);
+                }
+
+                // 关闭 WebSocket
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                  ws.close();
+                }
+              }
+            }
+          } catch (e) {
+            // 轮询错误静默处理，不影响正常流程
+          }
+        }, 3000);
+      }
+
       // 设置超时
       timeoutId = setTimeout(() => {
         if (ws) ws.close();
@@ -2553,6 +2735,10 @@ const App = () => {
 
     } catch (err) {
       console.error('[generateWithRefImageLoop] 生成错误:', err);
+
+      // 清除轮询
+      pollCompleted = true;
+      if (pollInterval) clearInterval(pollInterval);
 
       // 重置当前占位符为 failed
       updateImagePlaceholders(prev => prev.map(p =>
