@@ -244,6 +244,7 @@ const App = () => {
   const nextPromptId = useRef(Math.max(...savedPromptsForId.map(p => p.id)) + 1);
 
   const nextBatchId = useRef(1); // 批次计数器，确保每个批次有唯一ID
+  const isGeneratingRef = useRef(false); // 同步跟踪生成状态，避免竞态条件
   const isUpscalingRef = useRef(false); // 同步跟踪高清化状态，避免竞态条件
   const upscaleQueueRef = useRef([]); // 同步跟踪高清化队列，避免状态更新延迟
   const generationQueueRef = useRef([]); // 同步跟踪生成队列，避免状态更新延迟
@@ -1287,6 +1288,7 @@ const App = () => {
       console.log('[generateForPrompt] finally 块执行 - batchId:', finalBatchId);
       // 标记提示词为非生成中
       setPrompts(prev => prev.map(p => p.id === promptId ? { ...p, isGenerating: false } : p));
+      isGeneratingRef.current = false; // 同步重置生成状态
       processQueue();
     }
   };
@@ -1324,6 +1326,7 @@ const App = () => {
       reason: reason
     });
 
+    isGeneratingRef.current = false;
     setIsGenerating(false);
   };
 
@@ -1360,6 +1363,7 @@ const App = () => {
     }
 
     // 直接调用 generateForPrompt 继续生成，传入 batchId
+    isGeneratingRef.current = true;
     setIsGenerating(true);
     generateForPrompt(promptId, prompt.text, pausedBatchId);
   };
@@ -1384,6 +1388,7 @@ const App = () => {
       savedParams: null,
       reason: ''
     });
+    isGeneratingRef.current = false;
     setIsGenerating(false);
   };
 
@@ -1565,6 +1570,7 @@ const App = () => {
         if (generationQueueRef.current.length > 0) {
           processQueue();
         } else {
+          isGeneratingRef.current = false;
           setIsGenerating(false);
         }
         return;
@@ -1577,6 +1583,7 @@ const App = () => {
       if (prompt && prompt.text.trim()) {
         const batchQueueCount = queuePlaceholders.filter(p => p.batchId === firstQueuePlaceholder.batchId).length;
         console.log(`[会话恢复] 继续生成 ${batchQueueCount} 个剩余图片，batchId: ${firstQueuePlaceholder.batchId}`);
+        isGeneratingRef.current = true;
         setIsGenerating(true);
         generateLoop(
           firstQueuePlaceholder.promptId,
@@ -1587,6 +1594,7 @@ const App = () => {
         );
       } else {
         console.warn('[会话恢复] 找不到对应的 prompt，无法继续生成');
+        isGeneratingRef.current = false;
         setIsGenerating(false);
       }
     };
@@ -1647,9 +1655,17 @@ const App = () => {
   };
 
   const processQueue = () => {
-    console.log('[processQueue] 被调用 - 队列长度:', generationQueueRef.current.length);
+    console.log('[processQueue] 被调用 - 队列长度:', generationQueueRef.current.length, '正在生成:', isGeneratingRef.current);
+
+    // 如果已经在生成中，不要重复处理
+    if (isGeneratingRef.current) {
+      console.log('[processQueue] 已有任务在处理中，跳过');
+      return;
+    }
+
     if (generationQueueRef.current.length === 0) {
       console.log('[processQueue] 队列为空，停止生成');
+      isGeneratingRef.current = false;
       setIsGenerating(false);
 
       // 如果启用了生图队列优先，且高清化队列有任务等待，启动高清化
@@ -1669,6 +1685,7 @@ const App = () => {
     console.log('[processQueue] 处理下一个任务 - batchId:', nextTask.batchId, 'promptId:', nextTask.promptId);
     generationQueueRef.current = generationQueueRef.current.slice(1);
     setGenerationQueue(generationQueueRef.current);
+    isGeneratingRef.current = true; // 立即同步设置为 true
     setIsGenerating(true);
     generateForPrompt(nextTask.promptId, nextTask.promptText, nextTask.batchId);
   };
@@ -1694,9 +1711,9 @@ const App = () => {
       steps: steps
     };
 
-    console.log('[queueGeneration] 测试模式：延迟提交任务 - batchSize:', batchSize);
+    console.log('[queueGeneration] 延迟提交任务 - batchSize:', batchSize);
 
-    // 测试：延迟 0.1 秒循环执行 batchSize 次
+    // 延迟 0.1 秒循环执行 batchSize 次
     for (let i = 0; i < batchSize; i++) {
       setTimeout(() => {
         const batchId = nextBatchId.current++;
@@ -1737,15 +1754,15 @@ const App = () => {
         // 创建任务项
         const task = { promptId, promptText: prompt.text, batchId, savedParams };
 
-        // 处理队列
-        if (!isGenerating) {
-          // 没有正在生成的任务，立即开始
-          setIsGenerating(true);
-          generateForPrompt(task.promptId, task.promptText, task.batchId);
-        } else {
-          // 正在生成中，添加到队列
-          generationQueueRef.current = [...generationQueueRef.current, task];
-          setGenerationQueue(generationQueueRef.current);
+        // 先将任务加入队列
+        generationQueueRef.current = [...generationQueueRef.current, task];
+        setGenerationQueue(generationQueueRef.current);
+        console.log('[queueGeneration] 任务已加入队列 - batchId:', batchId, '当前队列长度:', generationQueueRef.current.length);
+
+        // 使用 ref 判断是否正在生成（避免状态延迟导致的竞态条件）
+        if (!isGeneratingRef.current) {
+          console.log('[queueGeneration] 未在生成中，启动 processQueue');
+          processQueue();
         }
       }, i * 100); // 每隔 0.1 秒
     }
@@ -1794,6 +1811,7 @@ const App = () => {
       ws.onerror = (error) => {
         console.error('WebSocket错误:', error);
         setError('WebSocket连接失败');
+        isGeneratingRef.current = false;
         setIsGenerating(false);
       };
 
@@ -1961,6 +1979,7 @@ const App = () => {
                 }, 800);
               }
 
+              // 注意：这里不需要设置 isGeneratingRef，会由 generateForPrompt 的 finally 块统一处理
               setIsGenerating(false);
               if (ws) ws.close();
               if (timeoutId) clearTimeout(timeoutId);
@@ -1971,6 +1990,7 @@ const App = () => {
           if (type === 'execution_error') {
             console.error('执行错误:', data);
             setError('生成失败: ' + (data.exception_message || '未知错误'));
+            // 注意：这里不需要设置 isGeneratingRef，会由 generateForPrompt 的 finally 块统一处理
             setIsGenerating(false);
             if (ws) ws.close();
             if (timeoutId) clearTimeout(timeoutId);
@@ -2027,6 +2047,7 @@ const App = () => {
       timeoutId = setTimeout(() => {
         if (ws) ws.close();
         setError('生成超时，请检查ComfyUI是否正常运行');
+        // 注意：这里不需要设置 isGeneratingRef，会由 generateForPrompt 的 finally 块统一处理
         setIsGenerating(false);
       }, 300000);
 
