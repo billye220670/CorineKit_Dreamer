@@ -17,7 +17,7 @@ import { generatePrompt } from './services/promptAssistantApi.js';
 import { SessionManager } from './services/sessionManager.js';
 
 // 应用版本号
-const APP_VERSION = '1.2.1';  // WebSocket 连接诊断日志增强
+const APP_VERSION = '1.2.2';  // 后台保活心跳机制 - 防止花生壳隧道超时
 
 // 图生图/ControlNet 降噪强度默认值
 const DEFAULT_IMG2IMG_DENOISE = 1;
@@ -233,6 +233,7 @@ const App = () => {
   const firstSeedRef = useRef(null);
   const heartbeatRef = useRef(null); // 心跳检测定时器
   const heartbeatFailCountRef = useRef(0); // 心跳失败计数
+  const keepaliveTimerRef = useRef(null); // 后台保活定时器（防止花生壳超时）
   const recoveryStateRef = useRef(recoveryState); // 同步跟踪恢复状态
   const longPressTimerRef = useRef(null); // 长按计时器
   const longPressTriggeredRef = useRef(false); // 长按是否已触发
@@ -458,6 +459,27 @@ const App = () => {
 
     return () => clearTimeout(timeoutId);
   }, [generationQueue, imagePlaceholders, isGenerating, recoveryState]);
+
+  // 组件挂载时启动后台保活心跳，卸载时清理
+  useEffect(() => {
+    console.log('[Keepalive] 📱 组件挂载，启动后台保活');
+    startKeepalive();
+
+    // 页面卸载时的清理
+    const handleBeforeUnload = () => {
+      console.log('[Keepalive] 📴 页面卸载，清理保活定时器');
+      stopKeepalive();
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    // 组件卸载时的清理
+    return () => {
+      console.log('[Keepalive] 🧹 组件卸载，清理保活定时器');
+      stopKeepalive();
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, []); // 空依赖数组，只在挂载和卸载时执行
 
   // 获取当前所有预设参数的快照
   const getCurrentSettingsSnapshot = () => ({
@@ -729,6 +751,63 @@ const App = () => {
     if (heartbeatRef.current) {
       clearInterval(heartbeatRef.current);
       heartbeatRef.current = null;
+    }
+  };
+
+  // 启动后台保活心跳（防止花生壳隧道超时）
+  const startKeepalive = () => {
+    if (keepaliveTimerRef.current) return; // 已经在运行
+
+    console.log('[Keepalive] 🟢 启动后台保活心跳，间隔 5 分钟');
+
+    // 立即执行一次
+    sendKeepalivePing();
+
+    // 每 5 分钟执行一次
+    keepaliveTimerRef.current = setInterval(() => {
+      sendKeepalivePing();
+    }, 300000); // 5 分钟 = 300000ms
+  };
+
+  // 停止后台保活心跳
+  const stopKeepalive = () => {
+    if (keepaliveTimerRef.current) {
+      console.log('[Keepalive] 🔴 停止后台保活心跳');
+      clearInterval(keepaliveTimerRef.current);
+      keepaliveTimerRef.current = null;
+    }
+  };
+
+  // 发送保活 ping 请求
+  const sendKeepalivePing = async () => {
+    try {
+      const startTime = Date.now();
+      const response = await fetch(`${COMFYUI_API}/health`, {
+        method: 'GET',
+        headers: getAuthHeaders(),
+        signal: AbortSignal.timeout(5000) // 5秒超时
+      });
+
+      const elapsed = Date.now() - startTime;
+
+      if (response.ok) {
+        console.log('[Keepalive] ✅ 保活 ping 成功', {
+          url: `${COMFYUI_API}/health`,
+          responseTime: `${elapsed}ms`,
+          time: new Date().toLocaleString('zh-CN')
+        });
+      } else {
+        console.warn('[Keepalive] ⚠️ 保活 ping 失败 - HTTP', response.status, {
+          url: `${COMFYUI_API}/health`,
+          time: new Date().toLocaleString('zh-CN')
+        });
+      }
+    } catch (err) {
+      console.warn('[Keepalive] ⚠️ 保活 ping 失败', {
+        error: err.message,
+        url: `${COMFYUI_API}/health`,
+        time: new Date().toLocaleString('zh-CN')
+      });
     }
   };
 
