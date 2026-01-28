@@ -17,7 +17,7 @@ import { generatePrompt } from './services/promptAssistantApi.js';
 import { SessionManager } from './services/sessionManager.js';
 
 // 应用版本号
-const APP_VERSION = '1.2.2';  // 后台保活心跳机制 - 防止花生壳隧道超时
+const APP_VERSION = '1.2.3';  // 已下载标识功能 - SD/HQ 分离维护
 
 // 图生图/ControlNet 降噪强度默认值
 const DEFAULT_IMG2IMG_DENOISE = 1;
@@ -1329,7 +1329,8 @@ const App = () => {
         showQualityMenu: false,
         imageLoadError: false,
         imageRetryCount: 0,
-        isDownloaded: false
+        isDownloadedSD: false,
+        isDownloadedHQ: false
       };
 
       placeholders = [placeholder];
@@ -1580,11 +1581,12 @@ const App = () => {
     });
 
     const restoredPlaceholders = restoredSession.placeholders.map(p => {
-      // 确保所有恢复的占位符都有 upscaleStatus、upscaleProgress 和 isDownloaded（兼容旧数据）
+      // 确保所有恢复的占位符都有 upscaleStatus、upscaleProgress、isDownloadedSD 和 isDownloadedHQ（兼容旧数据）
       const baseProps = {
         upscaleStatus: p.upscaleStatus || 'none',
         upscaleProgress: p.upscaleProgress || 0,
-        isDownloaded: p.isDownloaded || false
+        isDownloadedSD: p.isDownloadedSD !== undefined ? p.isDownloadedSD : (p.isDownloaded ? true : false),
+        isDownloadedHQ: p.isDownloadedHQ || false
       };
 
       if (p.status === 'completed') {
@@ -3600,7 +3602,8 @@ const App = () => {
       const isHQ = placeholder.upscaleStatus === 'completed' && placeholder.displayQuality === 'hq' && placeholder.hqImageUrl;
       const url = isHQ ? placeholder.hqImageUrl : placeholder.imageUrl;
       const filename = isHQ ? placeholder.hqFilename : placeholder.filename;
-      await downloadImage(url, filename, placeholder.id);
+      const quality = isHQ ? 'hq' : 'sd';
+      await downloadImage(url, filename, placeholder.id, quality);
       // 稍微延迟以避免浏览器阻止多个下载
       await new Promise(resolve => setTimeout(resolve, 300));
     }
@@ -3620,7 +3623,7 @@ const App = () => {
   };
 
   // 下载图片
-  const downloadImage = async (imageUrl, filename, placeholderId = null) => {
+  const downloadImage = async (imageUrl, filename, placeholderId = null, quality = 'sd') => {
     try {
       const response = await fetch(imageUrl);
       const blob = await response.blob();
@@ -3633,10 +3636,11 @@ const App = () => {
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
 
-      // 标记为已下载
+      // 标记为已下载（根据清晰度）
       if (placeholderId) {
+        const fieldName = quality === 'hq' ? 'isDownloadedHQ' : 'isDownloadedSD';
         updateImagePlaceholders(prev => prev.map(p =>
-          p.id === placeholderId ? { ...p, isDownloaded: true } : p
+          p.id === placeholderId ? { ...p, [fieldName]: true } : p
         ));
       }
     } catch (err) {
@@ -3677,11 +3681,12 @@ const App = () => {
       const isHQ = placeholder.upscaleStatus === 'completed' && placeholder.displayQuality === 'hq' && placeholder.hqImageUrl;
       const url = isHQ ? placeholder.hqImageUrl : placeholder.imageUrl;
       const originalFilename = isHQ ? placeholder.hqFilename : placeholder.filename;
+      const quality = isHQ ? 'hq' : 'sd';
       // 获取文件扩展名
       const ext = originalFilename?.split('.').pop() || 'png';
       const newFilename = `${batchDownloadPrefix.trim()}_${String(index).padStart(3, '0')}.${ext}`;
 
-      await downloadImage(url, newFilename, placeholder.id);
+      await downloadImage(url, newFilename, placeholder.id, quality);
       // 稍微延迟以避免浏览器阻止多个下载
       await new Promise(resolve => setTimeout(resolve, 300));
       index++;
@@ -4986,7 +4991,8 @@ const App = () => {
                                 const isHQ = placeholder.upscaleStatus === 'completed' && placeholder.displayQuality === 'hq' && placeholder.hqImageUrl;
                                 const url = isHQ ? placeholder.hqImageUrl : placeholder.imageUrl;
                                 const filename = isHQ ? placeholder.hqFilename : placeholder.filename;
-                                downloadImage(url, filename, placeholder.id);
+                                const quality = isHQ ? 'hq' : 'sd';
+                                downloadImage(url, filename, placeholder.id, quality);
                               }
                             }
                           }}
@@ -5079,11 +5085,17 @@ const App = () => {
                           )}
                         </div>
                       )}
-                      {/* 已下载标识 - 仅在completed状态且已下载时显示 */}
-                      {placeholder.status === 'completed' && placeholder.isDownloaded && (
-                        <div className="downloaded-badge" title="已下载">
-                          <Check size={12} strokeWidth={3} />
-                        </div>
+                      {/* 已下载标识 - 仅在completed状态且对应清晰度已下载时显示 */}
+                      {placeholder.status === 'completed' && (
+                        (() => {
+                          const isDisplayingHQ = placeholder.upscaleStatus === 'completed' && placeholder.displayQuality === 'hq' && placeholder.hqImageUrl;
+                          const isDownloaded = isDisplayingHQ ? placeholder.isDownloadedHQ : placeholder.isDownloadedSD;
+                          return isDownloaded && (
+                            <div className="downloaded-badge" title="已下载">
+                              <Check size={12} strokeWidth={3} />
+                            </div>
+                          );
+                        })()
                       )}
                       {/* 进度条幕布 - 生成中或高清化中显示 */}
                       {(placeholder.status !== 'completed' || placeholder.upscaleStatus === 'upscaling') && (
