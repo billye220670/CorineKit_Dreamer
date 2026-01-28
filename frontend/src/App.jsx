@@ -1328,7 +1328,8 @@ const App = () => {
         displayQuality: 'hq',
         showQualityMenu: false,
         imageLoadError: false,
-        imageRetryCount: 0
+        imageRetryCount: 0,
+        isDownloaded: false
       };
 
       placeholders = [placeholder];
@@ -1579,10 +1580,11 @@ const App = () => {
     });
 
     const restoredPlaceholders = restoredSession.placeholders.map(p => {
-      // 确保所有恢复的占位符都有 upscaleStatus 和 upscaleProgress（兼容旧数据）
+      // 确保所有恢复的占位符都有 upscaleStatus、upscaleProgress 和 isDownloaded（兼容旧数据）
       const baseProps = {
         upscaleStatus: p.upscaleStatus || 'none',
-        upscaleProgress: p.upscaleProgress || 0
+        upscaleProgress: p.upscaleProgress || 0,
+        isDownloaded: p.isDownloaded || false
       };
 
       if (p.status === 'completed') {
@@ -1817,7 +1819,8 @@ const App = () => {
           displayQuality: 'hq',
           showQualityMenu: false,
           imageLoadError: false,
-          imageRetryCount: 0
+          imageRetryCount: 0,
+          isDownloaded: false
         };
 
         console.log('[queueGeneration] 创建任务 - index:', i, 'batchId:', batchId);
@@ -3597,7 +3600,7 @@ const App = () => {
       const isHQ = placeholder.upscaleStatus === 'completed' && placeholder.displayQuality === 'hq' && placeholder.hqImageUrl;
       const url = isHQ ? placeholder.hqImageUrl : placeholder.imageUrl;
       const filename = isHQ ? placeholder.hqFilename : placeholder.filename;
-      await downloadImage(url, filename);
+      await downloadImage(url, filename, placeholder.id);
       // 稍微延迟以避免浏览器阻止多个下载
       await new Promise(resolve => setTimeout(resolve, 300));
     }
@@ -3617,7 +3620,7 @@ const App = () => {
   };
 
   // 下载图片
-  const downloadImage = async (imageUrl, filename) => {
+  const downloadImage = async (imageUrl, filename, placeholderId = null) => {
     try {
       const response = await fetch(imageUrl);
       const blob = await response.blob();
@@ -3629,6 +3632,13 @@ const App = () => {
       a.click();
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
+
+      // 标记为已下载
+      if (placeholderId) {
+        updateImagePlaceholders(prev => prev.map(p =>
+          p.id === placeholderId ? { ...p, isDownloaded: true } : p
+        ));
+      }
     } catch (err) {
       console.error('下载失败:', err);
       setError('下载失败: ' + err.message);
@@ -3671,7 +3681,7 @@ const App = () => {
       const ext = originalFilename?.split('.').pop() || 'png';
       const newFilename = `${batchDownloadPrefix.trim()}_${String(index).padStart(3, '0')}.${ext}`;
 
-      await downloadImage(url, newFilename);
+      await downloadImage(url, newFilename, placeholder.id);
       // 稍微延迟以避免浏览器阻止多个下载
       await new Promise(resolve => setTimeout(resolve, 300));
       index++;
@@ -4976,7 +4986,7 @@ const App = () => {
                                 const isHQ = placeholder.upscaleStatus === 'completed' && placeholder.displayQuality === 'hq' && placeholder.hqImageUrl;
                                 const url = isHQ ? placeholder.hqImageUrl : placeholder.imageUrl;
                                 const filename = isHQ ? placeholder.hqFilename : placeholder.filename;
-                                downloadImage(url, filename);
+                                downloadImage(url, filename, placeholder.id);
                               }
                             }
                           }}
@@ -5067,6 +5077,12 @@ const App = () => {
                               </button>
                             </div>
                           )}
+                        </div>
+                      )}
+                      {/* 已下载标识 - 仅在completed状态且已下载时显示 */}
+                      {placeholder.status === 'completed' && placeholder.isDownloaded && (
+                        <div className="downloaded-badge" title="已下载">
+                          <Check size={12} strokeWidth={3} />
                         </div>
                       )}
                       {/* 进度条幕布 - 生成中或高清化中显示 */}
