@@ -84,7 +84,10 @@ export class SessionManager {
         savedParams: p.savedParams,
         // 正在高清化的重置为 none，已完成的保留
         upscaleStatus: isUpscaleCompleted ? 'completed' : 'none',
-        upscaleProgress: isUpscaleCompleted ? p.upscaleProgress : 0
+        upscaleProgress: isUpscaleCompleted ? p.upscaleProgress : 0,
+        // 保存下载状态
+        isDownloadedSD: p.isDownloadedSD || false,
+        isDownloadedHQ: p.isDownloadedHQ || false
         // 不保存 imageLoadError, imageRetryCount, isLoading - 这些是临时状态
       };
     });
@@ -234,7 +237,9 @@ export class SessionManager {
           hqFilename: img.hqFilename,
           savedParams: img.savedParams,
           upscaleStatus: img.upscaleStatus,
-          upscaleProgress: img.upscaleProgress
+          upscaleProgress: img.upscaleProgress,
+          isDownloadedSD: img.isDownloadedSD || false,
+          isDownloadedHQ: img.isDownloadedHQ || false
         }))
       };
     });
