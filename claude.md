@@ -7,7 +7,7 @@
 **名称**: CorineGen - AI 图像生成器
 **架构**: React 前端 + Node.js 后端（前后端分离）
 **用途**: ComfyUI 的 Web 前端界面，用于生成和管理 AI 图像
-**当前版本**: 1.1.0-dev (LLM 提示词助理功能开发中) ⭐
+**当前版本**: 1.2.3 (已下载标识功能 - SD/HQ 分离维护) ✅
 **主要语言**: JavaScript (JSX)
 
 ## 架构说明
@@ -181,12 +181,24 @@ const checkConnection = async (silent = false) => { ... }
 - 包括批次数、步数、尺寸、种子设置等
 - localStorage 持久化
 
-### 8. 多选模式 (App.jsx:2595-2670)
+### 8. 多选模式与已下载标识 (App.jsx:2595-2670)
 - 长按图片进入多选模式
 - 全选按钮支持三态：全选、半选、全不选
 - 批量操作：下载、命名下载、高清化、删除
 - 删除操作有确认对话框
 - 拖拽种子到输入框时自动滚动页面
+
+**已下载标识** ✅ (v1.2.3+)
+- 在图片左下角显示绿色对勾标识
+- SD 和 HQ 清晰度分别维护下载状态
+  - `isDownloadedSD`: SD 图片是否已下载
+  - `isDownloadedHQ`: HQ 图片是否已下载
+- **逻辑**:
+  - 用户下载 SD 图片 → 标记 `isDownloadedSD = true`
+  - 用户高清化到 HQ → `isDownloadedHQ` 独立维护
+  - 用户在 HQ 和 SD 之间切换 → 显示对应的下载标识
+  - 已下载的图片仍可重复下载
+- **持久化**: 刷新网页后下载状态自动恢复
 
 ### 9. 图生图 & ControlNet (App.jsx:1475-1706)
 - 支持两种参考图片生成模式
@@ -483,6 +495,11 @@ ALLOWED_ORIGINS=http://localhost:5173,https://corine-gen.vercel.app
 | 图片加载成功处理 | App.jsx | 2424-2434 |
 | 批量重新加载失败图片 | App.jsx | 2436-2461 |
 | 图片 onError/onLoad 事件 | App.jsx | 3695-3696 |
+| 下载图片函数 | App.jsx | 3625-3649 |
+| 批量下载选中图片 | App.jsx | 3594-3610 |
+| 批量命名下载 | App.jsx | 3670-3697 |
+| 已下载标识 UI | App.jsx | 5088-5099 |
+| 已下载标识样式 | App.css | 1919-1937 |
 | 主题管理 | App.jsx | 139-151, App.css:1-50 |
 | localStorage 持久化 | App.jsx | 50-75 |
 
@@ -794,6 +811,6 @@ git log --oneline -5
 
 ---
 
-**最后更新**: 2026-01-19
+**最后更新**: 2026-01-28
 **维护者**: Claude Code Assistant
-**当前架构**: 前后端分离 + 无认证 + LLM 提示词助理 ⭐
+**当前架构**: 前后端分离 + 无认证 + LLM 提示词助理 + SD/HQ 下载状态分离 ⭐
