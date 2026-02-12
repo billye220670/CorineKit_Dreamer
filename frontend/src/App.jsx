@@ -711,8 +711,8 @@ const App = () => {
   // 阻止全局拖拽默认行为（防止浏览器打开图片）
   useEffect(() => {
     const preventDefaultDrop = (e) => {
-      // 只在非 textarea-wrapper 区域阻止默认行为
-      if (!e.target.closest('.textarea-wrapper')) {
+      // 只在非 textarea-wrapper 和非 images-container 区域阻止默认行为
+      if (!e.target.closest('.textarea-wrapper') && !e.target.closest('.images-container')) {
         e.preventDefault();
       }
     };
@@ -3566,6 +3566,96 @@ const App = () => {
     });
   };
 
+  // 处理拖拽外部图片到图库
+  const handleGalleryDrop = async (e) => {
+    e.preventDefault();
+    e.currentTarget.classList.remove('drag-over');
+
+    // 区分内部种子拖拽 vs 外部文件拖拽
+    if (e.dataTransfer.getData('seed')) return;
+
+    const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+    if (files.length === 0) return;
+
+    if (connectionStatus !== 'connected') {
+      setError('请先连接 ComfyUI 后再导入图片');
+      return;
+    }
+
+    const timestamp = Date.now();
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+
+      try {
+        // 获取图片尺寸
+        const aspectRatio = await new Promise((resolve) => {
+          const img = new window.Image();
+          img.onload = () => {
+            resolve(img.width / img.height);
+            URL.revokeObjectURL(img.src);
+          };
+          img.onerror = () => {
+            resolve(1);
+            URL.revokeObjectURL(img.src);
+          };
+          img.src = URL.createObjectURL(file);
+        });
+
+        // 上传到 ComfyUI input 文件夹
+        const formData = new FormData();
+        formData.append('image', file, file.name);
+        formData.append('overwrite', 'true');
+
+        const uploadResponse = await fetch(`${COMFYUI_API}/upload/image`, {
+          method: 'POST',
+          body: formData
+        });
+
+        if (!uploadResponse.ok) {
+          console.error('图片上传失败:', file.name);
+          continue;
+        }
+
+        const uploadResult = await uploadResponse.json();
+        const uploadedFilename = uploadResult.name || file.name;
+        const imageUrl = getImageUrl(uploadedFilename, '', 'input');
+
+        const batchId = nextBatchId.current++;
+        const placeholder = {
+          id: `import-${timestamp}-${i}`,
+          status: 'completed',
+          isLoading: false,
+          isNew: true,
+          progress: 100,
+          imageUrl: imageUrl,
+          filename: uploadedFilename,
+          promptId: null,
+          batchId: batchId,
+          upscaleStatus: 'none',
+          upscaleProgress: 0,
+          hqImageUrl: null,
+          hqFilename: null,
+          seed: null,
+          aspectRatio: aspectRatio,
+          savedParams: null,
+          displayQuality: 'hq',
+          showQualityMenu: false,
+          imageLoadError: false,
+          imageRetryCount: 0,
+          isDownloadedSD: false,
+          isDownloadedHQ: false
+        };
+
+        updateImagePlaceholders(prev => [...prev, placeholder]);
+      } catch (err) {
+        console.error('导入图片失败:', file.name, err);
+      }
+    }
+
+    scrollToBottom();
+  };
+
   // 切换图片选中状态
   const toggleImageSelection = (placeholderId) => {
     setSelectedImages(prev => {
@@ -4843,7 +4933,22 @@ const App = () => {
           )}
 
           {/* 图像展示区域 - 骨架占位图 */}
-          <div className="images-container" ref={imagesContainerRef}>
+          <div
+            className="images-container"
+            ref={imagesContainerRef}
+            onDragOver={(e) => {
+              if (e.dataTransfer.types.includes('Files')) {
+                e.preventDefault();
+                e.currentTarget.classList.add('drag-over');
+              }
+            }}
+            onDragLeave={(e) => {
+              if (!e.currentTarget.contains(e.relatedTarget)) {
+                e.currentTarget.classList.remove('drag-over');
+              }
+            }}
+            onDrop={handleGalleryDrop}
+          >
           {/* 控制栏 */}
           <div className="images-toolbar">
             {/* 多选模式下的全选按钮 - 最左侧 */}
@@ -5132,6 +5237,7 @@ const App = () => {
             <div className="empty-placeholder">
               <div className="empty-icon"><Image size={64} strokeWidth={1} /></div>
               <p className="empty-text">生成的图像将在这里显示</p>
+              <p className="empty-text empty-subtext">也可以拖拽图片到此处导入</p>
             </div>
           )}
         </div>
