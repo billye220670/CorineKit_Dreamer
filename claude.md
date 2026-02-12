@@ -7,7 +7,7 @@
 **名称**: CorineGen - AI 图像生成器
 **架构**: React 前端 + Node.js 后端（前后端分离）
 **用途**: ComfyUI 的 Web 前端界面，用于生成和管理 AI 图像
-**当前版本**: 1.2.3 (已下载标识功能 - SD/HQ 分离维护) ✅
+**当前版本**: 1.2.5 (高清化工作流升级 - JPG 压缩 + 内存清理) ✅
 **主要语言**: JavaScript (JSX)
 
 ## 架构说明
@@ -152,10 +152,12 @@ const checkConnection = async (silent = false) => { ... }
 - 支持任务取消
 - 实时进度显示
 
-### 4. 高清化队列 (App.jsx:626-884)
+### 4. 高清化队列 (App.jsx:3176-3362)
 - 使用 SeedVR2 模型 4x 超分辨率
+- **工作流**: `UpscaleNew.json` (v1.2.5+) - 包含 JPG 压缩 (quality=90) + 内存清理
 - 串行处理，避免 GPU 内存溢出
 - 状态: `none` → `queued` → `upscaling` → `completed`
+- **流程**: 上传图片 → 构建工作流 → WebSocket 监听进度 → 获取输出
 
 ### 5. 主题系统 (App.jsx:39-54, 139-151)
 **CSS 变量动态主题**:
@@ -245,15 +247,132 @@ imageRetryCount: 0       // 重试次数
 2. 手动重连成功 → 重新加载所有失败图片
 3. 生成时连接恢复 → 重新加载所有失败图片
 
-### 11. LLM 提示词助理 ⭐ 新功能 (v1.1.0+)
+### 11. 拖拽外部图片导入图库 ⭐ 新功能 (v1.2.4+)
+**功能**: 将外部图片（从文件管理器）直接拖拽到右侧图库面板导入
+
+#### 工作流程
+1. **拖拽区域**: 右侧图库面板（`.images-container`）
+2. **上传**: 自动上传到 ComfyUI 的 `input` 文件夹
+3. **导入**: 创建完整的 placeholder 对象，状态为 `completed`
+4. **兼容性**: 支持所有现有图片操作（HD 高清化、多选、删除、下载、SD/HQ 切换、已下载标识、会话恢复）
+
+#### 技术实现
+
+**全局拖拽拦截修改** (App.jsx:714-715):
+```javascript
+// 允许 .images-container 接收拖拽事件
+if (!e.target.closest('.textarea-wrapper') && !e.target.closest('.images-container')) {
+  e.preventDefault();
+}
+```
+
+**图库拖拽事件处理** (App.jsx:4936-4950):
+- `onDragOver`: 检查 `e.dataTransfer.types.includes('Files')` 区分外部文件 vs 内部种子拖拽，添加 `drag-over` class
+- `onDragLeave`: 用 `!e.currentTarget.contains(e.relatedTarget)` 防止子元素触发，移除 `drag-over` class
+- `onDrop`: 调用 `handleGalleryDrop`
+
+**导入函数核心逻辑** (App.jsx:3569-3656):
+```javascript
+const handleGalleryDrop = async (e) => {
+  // 1. 区分内部种子拖拽 vs 外部文件拖拽
+  if (e.dataTransfer.getData('seed')) return;
+
+  // 2. 过滤只接受图片文件
+  const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+
+  // 3. 检查 ComfyUI 连接
+  if (connectionStatus !== 'connected') {
+    setError('请先连接 ComfyUI 后再导入图片');
+    return;
+  }
+
+  // 4. 对每个文件：获取尺寸 → 上传 → 创建 placeholder → 追加到列表
+  for (let i = 0; i < files.length; i++) {
+    // 4a. 获取图片尺寸 (width/height)
+    const aspectRatio = await new Promise((resolve) => {
+      const img = new window.Image();
+      img.onload = () => {
+        resolve(img.width / img.height);
+        URL.revokeObjectURL(img.src);
+      };
+      img.src = URL.createObjectURL(file);
+    });
+
+    // 4b. 上传到 ComfyUI input 文件夹
+    const formData = new FormData();
+    formData.append('image', file, file.name);
+    formData.append('overwrite', 'true');
+    const uploadResponse = await fetch(`${COMFYUI_API}/upload/image`, {
+      method: 'POST',
+      body: formData
+    });
+    const uploadedFilename = uploadResponse.json().name || file.name;
+
+    // 4c. 创建 placeholder 对象
+    const placeholder = {
+      id: `import-${timestamp}-${i}`,           // 导入图片 ID，与生成图片格式不同
+      status: 'completed',                      // 直接完成状态
+      imageUrl: getImageUrl(uploadedFilename, '', 'input'),  // input 文件夹
+      filename: uploadedFilename,
+      seed: null,                               // 无种子，自动不支持拖拽种子
+      batchId: nextBatchId.current++,           // 使用共享计数器
+      upscaleStatus: 'none',                    // 显示 HD 按钮
+      hqImageUrl: null,
+      hqFilename: null,
+      aspectRatio: aspectRatio,
+      savedParams: null,                        // 无生成参数
+      displayQuality: 'hq',
+      showQualityMenu: false,
+      imageLoadError: false,
+      imageRetryCount: 0,
+      isDownloadedSD: false,
+      isDownloadedHQ: false
+    };
+
+    // 4d. 追加到列表
+    updateImagePlaceholders(prev => [...prev, placeholder]);
+  }
+
+  // 5. 滚动到底部
+  scrollToBottom();
+}
+```
+
+**CSS 拖拽反馈** (App.css:2350-2361):
+```css
+.images-container.drag-over {
+  outline: 2px solid var(--theme-primary);
+  outline-offset: -2px;
+  box-shadow: inset 0 0 30px var(--theme-border);
+}
+```
+使用 `outline` 而非 `border`（不影响布局），`inset box-shadow` 在可滚动容器内正确显示。
+
+#### 兼容性说明
+
+所有现有功能自动兼容，无需修改：
+
+| 功能 | 原因 |
+|------|------|
+| 多选模式 | 检查 `status === 'completed'`，导入图片满足 |
+| 单个/批量删除 | 按 ID 过滤，无特殊字段要求 |
+| 单个/批量下载 | 使用 `imageUrl`/`hqImageUrl`，已设置 |
+| 已下载标识 | `isDownloadedSD`/`isDownloadedHQ` 初始化为 false |
+| SD/HQ 切换 | 高清化完成后设置 `hqImageUrl`，切换逻辑复用 |
+| 种子拖拽忽略 | `seed: null` → `draggable` 条件自动过滤 |
+| HD 高清化 | `upscaleImage` 使用 `placeholder.imageUrl` 获取 blob，后续流程完全复用 |
+| 会话持久化 | 所有 completed 图片自动包含在 session.json 中 |
+| 图片加载重试 | `imageLoadError`/`imageRetryCount` 已初始化 |
+
+#### 使用场景
+1. 导入对比参考图片（之前需要用图生图功能）
+2. 快速查看已生成的图片集合
+3. 批量管理多张图片（结合多选功能）
+
+### 12. LLM 提示词助理 ⭐ 新功能 (v1.1.0+)
 **功能**: 使用 Grok AI 优化和生成提示词，支持 4 种智能模式
 
-#### 入口
-- **位置**: 提示词输入框左下角
-- **图标**: 魔法棒图标 (Wand2)
-- **触发**: 点击打开提示词助理 Modal 面板
-
-#### 四种模式
+**功能**: 使用 Grok AI 优化和生成提示词，支持 4 种智能模式
 
 **1. 创建变体 (variation)** - 生成 3-5 个提示词变体
 - **特殊字符**:
@@ -726,6 +845,7 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 - `perf`: 性能优化
 
 ### 最近提交历史
+- `[NEW]` feat: 升级高清化工作流到 UpscaleNew.json (JPG 压缩 + 内存清理) ✅
 - `7f0f869` test: 完成 LLM 提示词助理后端 API 测试验收 ⭐
 - `815153f` feat: 实现 LLM 提示词助理后端核心功能 (Phase 1) ⭐
 - `6b466c8` docs: 新增 LLM 提示词助理功能需求文档 ⭐
@@ -811,6 +931,6 @@ git log --oneline -5
 
 ---
 
-**最后更新**: 2026-01-28
+**最后更新**: 2026-02-12
 **维护者**: Claude Code Assistant
-**当前架构**: 前后端分离 + 无认证 + LLM 提示词助理 + SD/HQ 下载状态分离 ⭐
+**当前架构**: 前后端分离 + 无认证 + LLM 提示词助理 + SD/HQ 下载状态分离 + 高清化工作流升级 ✅

@@ -1,0 +1,146 @@
+{
+  "1145": {
+    "inputs": {
+      "image": "Corine_1-2-0__00009_.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "加载图像"
+    }
+  },
+  "1146": {
+    "inputs": {
+      "model": "ema_vae_fp16.safetensors",
+      "device": "cuda:0",
+      "encode_tiled": true,
+      "encode_tile_size": 1024,
+      "encode_tile_overlap": 128,
+      "decode_tiled": true,
+      "decode_tile_size": 1024,
+      "decode_tile_overlap": 128,
+      "tile_debug": "false",
+      "offload_device": "cpu",
+      "cache_model": false
+    },
+    "class_type": "SeedVR2LoadVAEModel",
+    "_meta": {
+      "title": "SeedVR2 (Down)Load VAE Model"
+    }
+  },
+  "1147": {
+    "inputs": {
+      "upscale_method": "lanczos",
+      "scale_by": 0.5000000000000001,
+      "image": [
+        "1145",
+        0
+      ]
+    },
+    "class_type": "ImageScaleBy",
+    "_meta": {
+      "title": "缩放图像（比例）"
+    }
+  },
+  "1148": {
+    "inputs": {
+      "seed": 3591741813,
+      "resolution": 2048,
+      "max_resolution": 0,
+      "batch_size": 5,
+      "uniform_batch_size": false,
+      "color_correction": "lab",
+      "temporal_overlap": 0,
+      "prepend_frames": 0,
+      "input_noise_scale": 0,
+      "latent_noise_scale": 0,
+      "offload_device": "cpu",
+      "enable_debug": false,
+      "image": [
+        "1147",
+        0
+      ],
+      "dit": [
+        "1149",
+        0
+      ],
+      "vae": [
+        "1146",
+        0
+      ]
+    },
+    "class_type": "SeedVR2VideoUpscaler",
+    "_meta": {
+      "title": "SeedVR2 Video Upscaler (v2.5.12)"
+    }
+  },
+  "1149": {
+    "inputs": {
+      "model": "seedvr2_ema_3b_fp16.safetensors",
+      "device": "cuda:0",
+      "blocks_to_swap": 32,
+      "swap_io_components": true,
+      "offload_device": "cpu",
+      "cache_model": "sdpa",
+      "attention_mode": "sdpa"
+    },
+    "class_type": "SeedVR2LoadDiTModel",
+    "_meta": {
+      "title": "SeedVR2 (Down)Load DiT Model"
+    }
+  },
+  "1150": {
+    "inputs": {
+      "quality": 90,
+      "image": [
+        "1148",
+        0
+      ]
+    },
+    "class_type": "KOOK_ImageCompression",
+    "_meta": {
+      "title": "高质量图片压缩"
+    }
+  },
+  "1151": {
+    "inputs": {
+      "filename_prefix": "HQ_",
+      "save_path": "output",
+      "images": [
+        "1150",
+        0
+      ]
+    },
+    "class_type": "KOOK_SaveJPGImage",
+    "_meta": {
+      "title": "保存JPG图像"
+    }
+  },
+  "1154": {
+    "inputs": {
+      "clean_file_cache": true,
+      "clean_processes": true,
+      "clean_dlls": true,
+      "retry_times": 3,
+      "anything": [
+        "1155",
+        0
+      ]
+    },
+    "class_type": "RAMCleanup",
+    "_meta": {
+      "title": "释放内存"
+    }
+  },
+  "1155": {
+    "inputs": {
+      "anything": [
+        "1148",
+        0
+      ]
+    },
+    "class_type": "easy cleanGpuUsed",
+    "_meta": {
+      "title": "清理显存占用"
+    }
+  }
+}

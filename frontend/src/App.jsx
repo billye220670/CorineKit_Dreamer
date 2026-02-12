@@ -5,7 +5,7 @@ import './App.css';
 
 // 导入工作流模板（从新位置）
 import workflowTemplate from './workflows/TextToImage.json';
-import upscaleTemplate from './workflows/Upscale.json';
+import upscaleTemplate from './workflows/UpscaleNew.json';
 import image2imageTemplate from './workflows/Image2Image.json';
 import controlnetTemplate from './workflows/ControlNet.json';
 
